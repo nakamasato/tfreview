@@ -1,0 +1,72 @@
+categories:
+  - id: destruction
+    title: Destruction / downtime
+    checks:
+      - id: delete-or-replace
+        level: critical
+        match: { actions: [delete] }
+        verdict_on_match: ask
+        question: |
+          Does this plan delete or replace (forces replacement) a resource that is
+          currently serving traffic or holding state? If so, name the resource and
+          say what becomes unavailable. Removing an IAM binding from a human user
+          does not count; removing one from a CI or workload identity does.
+  - id: data-loss
+    title: Data loss
+    checks:
+      - id: stateful-delete
+        level: critical
+        match:
+          actions: [delete]
+          types:
+            - aws_db_instance
+            - aws_rds_cluster
+            - aws_dynamodb_table
+            - aws_s3_bucket
+            - aws_efs_file_system
+            - aws_elasticache_cluster
+            - google_sql_database_instance
+            - google_storage_bucket
+            - google_bigquery_dataset
+            - google_bigquery_table
+            - google_spanner_instance
+            - google_firestore_database
+            - azurerm_storage_account
+            - azurerm_mssql_database
+            - azurerm_postgresql_flexible_server
+            - azurerm_cosmosdb_account
+      - id: guard-relaxed
+        level: critical
+        question: |
+          Is any of force_destroy, deletion_protection, skip_final_snapshot,
+          backup_retention_period, or an equivalent guard changed toward the side
+          that makes data easier to lose? Decide only from `changed_keys`; a value
+          that was already relaxed before this change does not count. If a resource
+          has no `changed_keys` (create/delete), answer unverifiable.
+  - id: exposure
+    title: Permissions / exposure
+    checks:
+      - id: privilege-grant
+        level: high
+        question: |
+          Does this change grant write-capable permissions to a human principal,
+          add a wildcard (*) to an IAM action or resource, or add a principal to a
+          role's trust policy? Decide only from `changed_keys` and `after`. Do not
+          excuse a grant because it might be justified; only answer whether it happens.
+      - id: public-exposure
+        level: high
+        question: |
+          Does this change open a resource to the internet: a security group or
+          firewall rule with 0.0.0.0/0 or ::/0 ingress, a public access block being
+          relaxed, a bucket or object policy allowing anonymous access, or a
+          load balancer / IP being made public? Decide only from `changed_keys`.
+  - id: cost
+    title: Cost
+    checks:
+      - id: recurring-charge
+        level: high
+        question: |
+          Does this change increase recurring charges? Name the resource and the
+          attribute that drives it (instance size, storage size, desired count, a
+          new always-on resource such as a NAT gateway or load balancer). Do not
+          state prices; describe the scale only in terms visible in the plan.
