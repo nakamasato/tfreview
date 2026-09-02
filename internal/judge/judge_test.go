@@ -127,6 +127,28 @@ func TestRunReusesState(t *testing.T) {
 	require.Equal(t, 0, out.Usage.Calls)
 }
 
+func TestRunMachineMissNotOverriddenByStaleCachedVerdict(t *testing.T) {
+	// prd の今回の plan には delete が無いので match は miss で機械判定される。
+	// しかし state には前回 LLM が hit と判定したときの verdict が残っている
+	// (以前は delete があった、など)。この古い候補で機械判定の miss を
+	// 上書きしてはいけない。
+	c := runCfgParsed(t)
+	prdNoDelete := &plan.Plan{Target: "prd", Counts: plan.Counts{Add: 1}, Resources: []plan.Resource{{Address: "aws_sqs_queue.q", Type: "aws_sqs_queue", Actions: []string{"create"}}}}
+	prev := state.New("old", c.Digest)
+	prev.Put("prd", prdNoDelete.Digest(), []model.Verdict{
+		{CheckID: "delete-or-replace", Kind: model.VerdictHit, Reason: "stale", Source: model.SourceLLM},
+		{CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "stale", Source: model.SourceLLM},
+	})
+	p := &mock.Provider{Answers: map[string][]llm.Answer{
+		"dev": {{CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "no sg"}},
+	}}
+	out, err := Run(context.Background(), Input{Config: c, Plans: []*plan.Plan{prdNoDelete, dev()}, Provider: p, Prev: prev, HeadSHA: "sha"})
+	require.NoError(t, err)
+	v := out.Verdicts["delete-or-replace"]
+	require.Equal(t, model.SourceMachine, v.Source)
+	require.Equal(t, model.VerdictMiss, v.Kind)
+}
+
 func TestRunPlanTooLargeIsUnverifiable(t *testing.T) {
 	p := &mock.Provider{Err: anthropic.ErrPlanTooLarge}
 	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: []*plan.Plan{dev()}, Provider: p, Prev: state.New("", "")})

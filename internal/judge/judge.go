@@ -107,6 +107,12 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 
 	// 不完全さは merge 前に確定させる。merge 後は skipped が負けて痕跡が消える。
 	for id, vs := range candidates {
+		if machine[id] {
+			// state から再利用した target の候補には、以前は LLM 判定だったが
+			// 今回は match だけで決着した check の古い verdict が混ざりうる。
+			// match が今回下した決定的判定を、そのような古い候補で上書きしない。
+			continue
+		}
 		for _, v := range vs {
 			if v.Kind == model.VerdictSkipped {
 				out.Unevaluated[id] = true
