@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,6 +61,11 @@ func newReviewCmd() *cobra.Command {
 			if err != nil {
 				return &exitError{code: 2, msg: err.Error()}
 			}
+			if cfg.LLM.Provider == "anthropic" && os.Getenv("ANTHROPIC_API_KEY") == "" {
+				// report-only tool: a missing key must not stop the run, but a
+				// silent tfreview:unknown with no explanation is worse than noise.
+				fmt.Fprintln(cmd.ErrOrStderr(), "warning: ANTHROPIC_API_KEY is not set; LLM checks will be skipped and the result will be tfreview:unknown")
+			}
 			if headSHA == "" {
 				headSHA = gitHead()
 			}
@@ -95,6 +101,11 @@ func newReviewCmd() *cobra.Command {
 				return err
 			}
 			cmd.Printf("%s (%s)\n", result.Label, outDir)
+			if result.Incomplete {
+				for _, line := range skippedSummaryLines(result) {
+					fmt.Fprintln(cmd.ErrOrStderr(), line)
+				}
+			}
 
 			if failOn != "" && !result.Incomplete {
 				score := result.Score
@@ -137,6 +148,41 @@ func configPathForLink(path string) string {
 		return ""
 	}
 	return filepath.ToSlash(path)
+}
+
+// skippedSummaryLines groups skipped checks by their (truncated) reason so a
+// run without credentials prints one line per cause instead of one line per
+// check, which for a real config can be dozens of lines saying the same thing.
+func skippedSummaryLines(result *render.Result) []string {
+	var order []string
+	byReason := map[string][]string{}
+	for _, cat := range result.Categories {
+		for _, ck := range cat.Checks {
+			if ck.Verdict != model.VerdictSkipped {
+				continue
+			}
+			reason := truncateReason(ck.Reason)
+			if _, ok := byReason[reason]; !ok {
+				order = append(order, reason)
+			}
+			byReason[reason] = append(byReason[reason], ck.ID)
+		}
+	}
+	lines := make([]string, 0, len(order))
+	for _, reason := range order {
+		lines = append(lines, "skipped: "+strings.Join(byReason[reason], ", ")+" — "+reason)
+	}
+	return lines
+}
+
+func truncateReason(reason string) string {
+	if i := strings.IndexByte(reason, '\n'); i >= 0 {
+		reason = reason[:i]
+	}
+	if len(reason) > 200 {
+		reason = reason[:200]
+	}
+	return reason
 }
 
 func gitHead() string {

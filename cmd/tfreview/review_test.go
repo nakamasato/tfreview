@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,17 @@ func run(t *testing.T, args ...string) error {
 	cmd := newRootCmd()
 	cmd.SetArgs(args)
 	return cmd.Execute()
+}
+
+func runCapture(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	cmd := newRootCmd()
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+	cmd.SetArgs(args)
+	err = cmd.Execute()
+	return outBuf.String(), errBuf.String(), err
 }
 
 func extractFixture(t *testing.T, dir, target string) string {
@@ -142,4 +154,36 @@ func TestReviewMockProviderRequiresOptIn(t *testing.T) {
 	cfg := writeCfg(t, dir, mockCfg)
 	err := run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o"))
 	require.Equal(t, 2, exitCode(err))
+}
+
+func TestReviewIncompleteSummarizesSkippedChecks(t *testing.T) {
+	dir := t.TempDir()
+	p := extractFixture(t, dir, "prd")
+	cfg := writeCfg(t, dir, mockCfg)
+	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
+	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{}`)
+	outDir := filepath.Join(dir, "out")
+
+	_, stderr, err := runCapture(t, "review", "--plan", p, "--config", cfg, "--out-dir", outDir)
+	require.NoError(t, err)
+	require.Contains(t, stderr, "skipped:")
+	require.Contains(t, stderr, "llm-only")
+	require.Contains(t, stderr, "no answer returned")
+}
+
+func TestReviewWarnsWhenAnthropicKeyMissing(t *testing.T) {
+	dir := t.TempDir()
+	p := extractFixture(t, dir, "prd")
+	cfg := writeCfg(t, dir, "llm: {provider: anthropic}\ncategories:\n  - id: destruction\n    title: D\n    checks:\n      - {id: llm-only, level: high, question: q}\n")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	outDir := filepath.Join(dir, "out")
+
+	_, stderr, err := runCapture(t, "review", "--plan", p, "--config", cfg, "--out-dir", outDir)
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode(err))
+	require.Contains(t, stderr, "ANTHROPIC_API_KEY is not set")
+
+	label, readErr := os.ReadFile(filepath.Join(outDir, "label.txt"))
+	require.NoError(t, readErr)
+	require.Equal(t, "tfreview:unknown\n", string(label))
 }
