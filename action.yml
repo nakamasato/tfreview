@@ -56,9 +56,25 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         ACTION_REF: ${{ github.action_ref }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         v="${VERSION:-$ACTION_REF}"
-        case "$v" in v[0-9]*.[0-9]*.[0-9]*) ;; *) v=latest ;; esac
+        case "$v" in
+          v[0-9]*.[0-9]*.[0-9]*) ;;
+          v[0-9]*)
+            # github.action_ref for a major-tag pin (e.g. "v1") is just "v1", which fails the
+            # vX.Y.Z pattern above; resolve it to the newest matching release so @v1 consumers
+            # don't fall through to `latest` (which could already be a future v2).
+            resolved="$(gh api repos/nakamasato/tfreview/releases --paginate --jq '.[].tag_name' 2>/dev/null | grep "^${v}\." | sort -V | tail -1 || true)"
+            if [ -n "$resolved" ]; then
+              v="$resolved"
+            else
+              echo "::warning::could not resolve latest release for $v; falling back to latest"
+              v=latest
+            fi
+            ;;
+          *) v=latest ;;
+        esac
         bash "${{ github.action_path }}/scripts/install.sh" "$v" "$RUNNER_TEMP/tfreview-bin"
         echo "$RUNNER_TEMP/tfreview-bin" >> "$GITHUB_PATH"
 
@@ -122,10 +138,12 @@ runs:
         state="$RUNNER_TEMP/tfreview-state/state.json"
         fail=""
         [ -n "$FAIL_ON" ] && fail="--fail-on $FAIL_ON"
+        code=0
+        # composite run steps execute under ambient `set -e`; `|| code=$?` captures the
+        # --fail-on exit status without tripping it, so outputs/state/Comment still run.
         # shellcheck disable=SC2086
         tfreview review $PLAN_ARGS --config "$CONFIG" --state-in "$state" --out-dir "$out" \
-          --head-sha "$HEAD_SHA" --repo "$GITHUB_REPOSITORY" $fail
-        code=$?
+          --head-sha "$HEAD_SHA" --repo "$GITHUB_REPOSITORY" $fail || code=$?
         # exit 1 (fail-on) でも出力は揃っているので、コメントを出してから落とす
         if [ -f "$out/result.json" ]; then
           echo "score=$(jq -r .score "$out/result.json")" >> "$GITHUB_OUTPUT"
