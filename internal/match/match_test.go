@@ -11,7 +11,7 @@ import (
 func plans() []*plan.Plan {
 	return []*plan.Plan{
 		{Target: "prd", Resources: []plan.Resource{
-			{Address: "aws_db_instance.main", Type: "aws_db_instance", Actions: []string{"delete"}},
+			{Address: "aws_db_instance.main", Type: "aws_db_instance", Actions: []string{"delete", "create"}},
 			{Address: "aws_sqs_queue.jobs", Type: "aws_sqs_queue", Actions: []string{"create"}},
 		}},
 		{Target: "shared", Resources: []plan.Resource{
@@ -61,8 +61,10 @@ func TestEvaluateAskProducesHit(t *testing.T) {
 
 func TestCandidates(t *testing.T) {
 	rs := Candidates(model.Match{Actions: []string{"create"}}, plans()[0])
-	require.Len(t, rs, 1)
-	require.Equal(t, "aws_sqs_queue.jobs", rs[0].Address)
+	require.Len(t, rs, 2)
+	addresses := []string{rs[0].Address, rs[1].Address}
+	require.Contains(t, addresses, "aws_db_instance.main")
+	require.Contains(t, addresses, "aws_sqs_queue.jobs")
 	require.Empty(t, Candidates(model.Match{Targets: []string{"dev"}}, plans()[0]))
 }
 
