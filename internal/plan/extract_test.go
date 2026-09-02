@@ -29,13 +29,21 @@ func byAddress(p *Plan, addr string) Resource {
 func TestExtractDropsNoop(t *testing.T) {
 	p := loadFixture(t)
 	require.Equal(t, "aws-prd", p.Target)
-	require.Len(t, p.Resources, 5)
+	require.Len(t, p.Resources, 6)
 	require.Empty(t, byAddress(p, "aws_vpc.main").Address)
 }
 
 func TestExtractCounts(t *testing.T) {
 	p := loadFixture(t)
-	require.Equal(t, Counts{Add: 1, Change: 2, Destroy: 1, Replace: 1, Import: 1}, p.Counts)
+	require.Equal(t, Counts{Add: 1, Change: 2, Destroy: 1, Replace: 1, Import: 2}, p.Counts)
+}
+
+func TestExtractKeepsImportOnlyNoop(t *testing.T) {
+	p := loadFixture(t)
+	r := byAddress(p, "aws_s3_bucket.adopted")
+	require.Equal(t, []string{"no-op"}, r.Actions)
+	require.Equal(t, map[string]any{"bucket": "adopted"}, r.After)
+	require.Nil(t, r.ChangedKeys)
 }
 
 func TestExtractChangedKeysOnlyForUpdateAndReplace(t *testing.T) {

@@ -59,6 +59,14 @@
       "name": "imported",
       "provider_name": "registry.terraform.io/hashicorp/aws",
       "change": {"actions": ["update"], "before": {"bucket": "imported"}, "after": {"bucket": "imported", "force_destroy": false}, "after_sensitive": {}, "importing": {"id": "imported"}}
+    },
+    {
+      "address": "aws_s3_bucket.adopted",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "adopted",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {"actions": ["no-op"], "before": {"bucket": "adopted"}, "after": {"bucket": "adopted"}, "after_sensitive": {}, "importing": {"id": "adopted"}}
     }
   ]
 }

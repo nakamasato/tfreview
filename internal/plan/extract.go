@@ -31,8 +31,12 @@ func Extract(raw []byte, target string) (*Plan, error) {
 	}
 	p := &Plan{Target: target, Resources: []Resource{}}
 	for _, rc := range show.ResourceChanges {
+		importing := len(rc.Change.Importing) > 0 && string(rc.Change.Importing) != "null"
 		kind := classify(rc.Change.Actions)
-		if kind == "" {
+		// no-op/read are ordinarily dropped as noise, but a no-op/read paired with
+		// `importing` is terraform adopting an existing resource into state — a
+		// real event worth keeping even though nothing about the resource changes.
+		if kind == "" && !importing {
 			continue
 		}
 		switch kind {
@@ -45,7 +49,7 @@ func Extract(raw []byte, target string) (*Plan, error) {
 		case "replace":
 			p.Counts.Replace++
 		}
-		if len(rc.Change.Importing) > 0 && string(rc.Change.Importing) != "null" {
+		if importing {
 			p.Counts.Import++
 		}
 		r := Resource{
