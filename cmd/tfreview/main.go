@@ -19,6 +19,9 @@ func (e *exitError) Error() string { return e.msg }
 
 var errAny = errors.New("any")
 
+// version はリリースビルド時に goreleaser の ldflags (-X main.version=...) で埋め込まれる。
+var version = "dev"
+
 func exitCode(err error) int {
 	if err == nil {
 		return 0
@@ -37,6 +40,7 @@ func newRootCmd() *cobra.Command {
 		Long:          "tfreview reviews terraform plan results against configurable risk criteria",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Version:       version,
 	}
 	root.AddCommand(newExtractCmd(), newReviewCmd(), newCommentCmd(), newFetchCmd())
 	return root

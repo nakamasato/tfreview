@@ -1,0 +1,163 @@
+name: tfreview
+description: Review terraform plan results against configurable risk checks and post one PR comment with a label
+branding:
+  icon: shield
+  color: purple
+inputs:
+  plan-json:
+    description: Glob of plan JSON files produced by `tfreview extract`. Mutually exclusive with show-json.
+    required: false
+    default: ""
+  show-json:
+    description: Glob of `terraform show -json` outputs. The target name is the file name without extension.
+    required: false
+    default: ""
+  config:
+    description: Path to .tfreview.yaml
+    required: false
+    default: .tfreview.yaml
+  anthropic-api-key:
+    description: Anthropic API key
+    required: true
+  github-token:
+    description: Token with pull-requests:write and issues:write
+    required: false
+    default: ${{ github.token }}
+  fail-on:
+    description: Fail the step when the score reaches this level (medium|high|critical). Empty = never fail.
+    required: false
+    default: ""
+  comment:
+    description: Post the comment and label to the PR
+    required: false
+    default: "true"
+  version:
+    description: tfreview release to install (default = the tag this action was referenced by)
+    required: false
+    default: ""
+outputs:
+  score:
+    description: Overall score (none|medium|high|critical)
+    value: ${{ steps.review.outputs.score }}
+  label:
+    description: Label applied (tfreview:*)
+    value: ${{ steps.review.outputs.label }}
+  incomplete:
+    description: "true when some checks could not be evaluated"
+    value: ${{ steps.review.outputs.incomplete }}
+  out-dir:
+    description: Directory holding result.json / comment.md / label.txt / state.json
+    value: ${{ steps.review.outputs.out-dir }}
+runs:
+  using: composite
+  steps:
+    - name: Install tfreview
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        v="${VERSION:-$ACTION_REF}"
+        case "$v" in v[0-9]*.[0-9]*.[0-9]*) ;; *) v=latest ;; esac
+        bash "${{ github.action_path }}/scripts/install.sh" "$v" "$RUNNER_TEMP/tfreview-bin"
+        echo "$RUNNER_TEMP/tfreview-bin" >> "$GITHUB_PATH"
+
+    - name: Collect plan JSON
+      id: plans
+      shell: bash
+      env:
+        PLAN_JSON: ${{ inputs.plan-json }}
+        SHOW_JSON: ${{ inputs.show-json }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/tfreview-plans"
+        mkdir -p "$dir"
+        if [ -n "$PLAN_JSON" ] && [ -n "$SHOW_JSON" ]; then
+          echo "::error::plan-json and show-json are mutually exclusive"; exit 2
+        fi
+        if [ -n "$PLAN_JSON" ]; then
+          shopt -s nullglob
+          for f in $PLAN_JSON; do cp "$f" "$dir/"; done
+        elif [ -n "$SHOW_JSON" ]; then
+          shopt -s nullglob
+          for f in $SHOW_JSON; do
+            name="$(basename "$f" .json)"
+            tfreview extract --show-json "$f" --target "$name" --out "$dir/$name.json"
+          done
+        fi
+        args=""
+        for f in "$dir"/*.json; do [ -e "$f" ] && args="$args --plan $f"; done
+        echo "args=$args" >> "$GITHUB_OUTPUT"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+    - name: Upload plan JSON for `tfreview fetch`
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v7
+      with:
+        name: tfreview-plan
+        path: ${{ steps.plans.outputs.dir }}
+        if-no-files-found: ignore
+        retention-days: 7
+
+    - name: Restore previous state
+      if: github.event_name == 'pull_request'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/tfreview-state
+        key: tfreview-state-${{ github.event.pull_request.number }}-${{ github.run_id }}
+        restore-keys: tfreview-state-${{ github.event.pull_request.number }}-
+
+    - name: Review
+      id: review
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CONFIG: ${{ inputs.config }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        PLAN_ARGS: ${{ steps.plans.outputs.args }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: |
+        set -uo pipefail
+        out="$RUNNER_TEMP/tfreview-out"
+        state="$RUNNER_TEMP/tfreview-state/state.json"
+        fail=""
+        [ -n "$FAIL_ON" ] && fail="--fail-on $FAIL_ON"
+        # shellcheck disable=SC2086
+        tfreview review $PLAN_ARGS --config "$CONFIG" --state-in "$state" --out-dir "$out" \
+          --head-sha "$HEAD_SHA" --repo "$GITHUB_REPOSITORY" $fail
+        code=$?
+        # exit 1 (fail-on) でも出力は揃っているので、コメントを出してから落とす
+        if [ -f "$out/result.json" ]; then
+          echo "score=$(jq -r .score "$out/result.json")" >> "$GITHUB_OUTPUT"
+          echo "label=$(jq -r .label "$out/result.json")" >> "$GITHUB_OUTPUT"
+          echo "incomplete=$(jq -r .incomplete "$out/result.json")" >> "$GITHUB_OUTPUT"
+          echo "out-dir=$out" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/tfreview-state" && cp "$out/state.json" "$state"
+        fi
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        exit 0
+
+    - name: Comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request' && steps.review.outputs.out-dir != ''
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        OUT: ${{ steps.review.outputs.out-dir }}
+        PR: ${{ github.event.pull_request.number }}
+      run: tfreview comment --result "$OUT/result.json" --pr "$PR" --repo "$GITHUB_REPOSITORY"
+
+    - name: Save state
+      if: github.event_name == 'pull_request' && steps.review.outputs.out-dir != ''
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/tfreview-state
+        key: tfreview-state-${{ github.event.pull_request.number }}-${{ github.run_id }}
+
+    - name: Fail on threshold
+      if: steps.review.outputs.code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.review.outputs.code }}
+      run: |
+        echo "::error::tfreview exited with $CODE"
+        exit "$CODE"
