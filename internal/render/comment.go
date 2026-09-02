@@ -3,7 +3,7 @@ package render
 import (
 	"fmt"
 	"net/url"
-	strs "strings"
+	"strings"
 
 	"github.com/nakamasato/tfreview/internal/model"
 )
@@ -17,14 +17,14 @@ var levelEmoji = map[model.Level]string{model.LevelNone: "🟢", model.LevelMedi
 
 func Comment(r *Result) string {
 	s := t(r.Language)
-	var b strs.Builder
+	var b strings.Builder
 	b.WriteString(Begin + "\n")
 
 	// 見出しはテキストだけで危険度が読めるようにする。バッジ（shields.io）は外部
 	// サービスなので、落ちたときに情報が消えないよう見出しの重複として置く。
 	switch {
 	case r.Incomplete:
-		fmt.Fprintf(&b, "## 🔵 %s: %s (%s)\n\n", s.Risk, s.Incomplete, strs.Join(r.Unevaluated, ", "))
+		fmt.Fprintf(&b, "## 🔵 %s: %s (%s)\n\n", s.Risk, s.Incomplete, strings.Join(r.Unevaluated, ", "))
 	case r.Score == model.LevelNone:
 		fmt.Fprintf(&b, "## 🟢 %s: none\n\n", s.Risk)
 	default:
@@ -93,7 +93,7 @@ func topCategory(r *Result) string {
 	return ""
 }
 
-func writeBadges(b *strs.Builder, r *Result) {
+func writeBadges(b *strings.Builder, r *Result) {
 	if r.Incomplete {
 		// バッジは見出しを反映する。Incomplete のときの見出しは "incomplete" のみなので
 		// risk-<score> は出さず、単一の risk-incomplete バッジにする。
@@ -109,12 +109,12 @@ func writeBadges(b *strs.Builder, r *Result) {
 
 // shields.io は `-` と `_` を区切りに使うので二重にする。残りは URL エスケープ。
 func badgeText(s string) string {
-	s = strs.ReplaceAll(s, "-", "--")
-	s = strs.ReplaceAll(s, "_", "__")
+	s = strings.ReplaceAll(s, "-", "--")
+	s = strings.ReplaceAll(s, "_", "__")
 	return url.PathEscape(s)
 }
 
-func writeMeta(b *strs.Builder, r *Result, s strings) {
+func writeMeta(b *strings.Builder, r *Result, s texts) {
 	short := r.HeadSHA
 	if len(short) > 7 {
 		short = short[:7]
@@ -126,7 +126,7 @@ func writeMeta(b *strs.Builder, r *Result, s strings) {
 	fmt.Fprintf(b, "%s <relative-time datetime=\"%s\">%s</relative-time> %s %s.\n\n", s.JudgedAt, r.JudgedAt, r.JudgedAt, s.For, commit)
 }
 
-func writeTargets(b *strs.Builder, r *Result, s strings) {
+func writeTargets(b *strings.Builder, r *Result, s texts) {
 	fmt.Fprintf(b, "<details><summary>%s</summary>\n\n| %s | + | ~ | - | ± | import | %s |\n| --- | --- | --- | --- | --- | --- | --- |\n", s.Targets, s.Target, s.Judgement)
 	for _, t := range r.Targets {
 		j := s.Rejudged
@@ -139,9 +139,9 @@ func writeTargets(b *strs.Builder, r *Result, s strings) {
 }
 
 func cell(s string) string {
-	s = strs.ReplaceAll(s, "\r\n", " ")
-	s = strs.ReplaceAll(s, "\n", " ")
-	return strs.ReplaceAll(s, "|", `\|`)
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.ReplaceAll(s, "|", `\|`)
 }
 
 func commas(n int64) string {
@@ -157,8 +157,8 @@ func commas(n int64) string {
 }
 
 func StripBlock(body string) string {
-	start := strs.Index(body, Begin)
-	end := strs.Index(body, End)
+	start := strings.Index(body, Begin)
+	end := strings.Index(body, End)
 	if start < 0 || end < 0 || end < start {
 		return body
 	}

@@ -1,12 +1,12 @@
 package render
 
-type strings struct {
+type texts struct {
 	Risk, Incomplete, Category, Hits, Checks, Check, Level, Verdict, Reason string
 	Targets, Target, Judgement, Reused, Rejudged, JudgedAt, For, Criteria   string
 	NoPlans, NoChanges, Calls, Tokens                                       string
 }
 
-var texts = map[string]strings{
+var catalog = map[string]texts{
 	"en": {
 		Risk: "Risk", Incomplete: "incomplete", Category: "Category", Hits: "Hits", Checks: "Checks",
 		Check: "Check", Level: "Level", Verdict: "Verdict", Reason: "Reason",
@@ -25,9 +25,9 @@ var texts = map[string]strings{
 	},
 }
 
-func t(lang string) strings {
-	if s, ok := texts[lang]; ok {
+func t(lang string) texts {
+	if s, ok := catalog[lang]; ok {
 		return s
 	}
-	return texts["en"]
+	return catalog["en"]
 }

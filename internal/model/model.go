@@ -42,8 +42,8 @@ const (
 	VerdictSkipped      VerdictKind = "skipped"
 )
 
-// skipped is at the lowest rank because "unverifiable" is weaker information than "no match".
-// When merging across targets, skipped should not override miss.
+// skipped is at the lowest rank because "could not evaluate" is weaker information
+// than "no match" (miss). When merging across targets, skipped should not override miss.
 var verdictRank = map[VerdictKind]int{VerdictSkipped: 0, VerdictMiss: 1, VerdictUnverifiable: 2, VerdictHit: 3}
 
 func (v VerdictKind) Rank() int { return verdictRank[v] }

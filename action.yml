@@ -150,7 +150,7 @@ runs:
           echo "label=$(jq -r .label "$out/result.json")" >> "$GITHUB_OUTPUT"
           echo "incomplete=$(jq -r .incomplete "$out/result.json")" >> "$GITHUB_OUTPUT"
           echo "out-dir=$out" >> "$GITHUB_OUTPUT"
-          mkdir -p "$RUNNER_TEMP/tfreview-state" && cp "$out/state.json" "$state"
+          mkdir -p "$RUNNER_TEMP/tfreview-state" && cp "$out/state.json" "$state" || true
         fi
         echo "code=$code" >> "$GITHUB_OUTPUT"
         exit 0

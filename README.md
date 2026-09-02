@@ -54,6 +54,10 @@ jobs:
           fail-on: critical
 ```
 
+Other inputs: `plan-json` (glob of plan JSON already reduced by `tfreview extract`;
+mutually exclusive with `show-json`) and `version` (the tfreview release to
+install; defaults to the tag the action itself was referenced by).
+
 `show-json` takes a glob of `terraform show -json` outputs; the target name is
 the file name without extension (use one file per directory/environment for a
 monorepo). Without a `.tfreview.yaml` the built-in, provider-neutral checks are
@@ -71,9 +75,13 @@ AI agent) without re-running `terraform plan`.
 | `tfreview extract --show-json plan.json --target prd --out prd.json` | Reduce `terraform show -json` to what review needs (`after` only, plus `changed_keys`; `before` never leaves the runner) |
 | `tfreview review --plan prd.json --plan dev.json [--state-in state.json] [--fail-on high]` | Judge; writes `result.json`, `comment.md`, `label.txt`, `state.json` |
 | `tfreview comment --pr 123 [--repo owner/name]` | Upsert the comment and set the label |
-| `tfreview fetch --pr 123 [--repo owner/name]` | Download the plan JSON a CI run uploaded |
+| `tfreview fetch --pr 123 [--repo owner/name] [--out-dir DIR] [--artifact NAME]` | Download the plan JSON a CI run uploaded (`--out-dir` default `tfreview-plans`, `--artifact` default `tfreview-plan`) |
 
 `--repo` defaults to the `GITHUB_REPOSITORY` environment variable.
+
+`--fail-on-machine-only` narrows `--fail-on` to verdicts a `match` decided
+(deterministic checks, or an `ask` check that fell back to its match result
+because the LLM didn't answer) — an LLM `hit` alone won't fail the build.
 
 Install: `go install github.com/nakamasato/tfreview/cmd/tfreview@latest` or the
 tarball from Releases.
