@@ -40,8 +40,8 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
 
       - run: terraform init
       - run: terraform plan -out=tfplan
@@ -70,8 +70,10 @@ AI agent) without re-running `terraform plan`.
 | --- | --- |
 | `tfreview extract --show-json plan.json --target prd --out prd.json` | Reduce `terraform show -json` to what review needs (`after` only, plus `changed_keys`; `before` never leaves the runner) |
 | `tfreview review --plan prd.json --plan dev.json [--state-in state.json] [--fail-on high]` | Judge; writes `result.json`, `comment.md`, `label.txt`, `state.json` |
-| `tfreview comment --pr 123` | Upsert the comment and set the label |
-| `tfreview fetch --pr 123` | Download the plan JSON a CI run uploaded |
+| `tfreview comment --pr 123 [--repo owner/name]` | Upsert the comment and set the label |
+| `tfreview fetch --pr 123 [--repo owner/name]` | Download the plan JSON a CI run uploaded |
+
+`--repo` defaults to the `GITHUB_REPOSITORY` environment variable.
 
 Install: `go install github.com/nakamasato/tfreview/cmd/tfreview@latest` or the
 tarball from Releases.
