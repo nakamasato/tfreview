@@ -61,6 +61,10 @@ func (c *Client) FetchPlanArtifact(ctx context.Context, pr int, name, outDir str
 	if err != nil {
 		return err
 	}
+	// api.github.com requires the token on this first request, but archive_download_url
+	// 302s to a signed, time-limited blob URL on a different host; the stdlib client
+	// strips Authorization on a cross-host redirect, which is exactly what we want —
+	// the token must not leak to that third-party storage host.
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
