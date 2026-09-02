@@ -3,6 +3,9 @@
 Review a `terraform plan` against the risks *you* define, and post the verdict to
 the pull request as one comment and one `tfreview:*` label.
 
+> Status: alpha. Until `v1`, any release may contain breaking changes — to the
+> flags, the config schema, the output files, or the action inputs.
+
 <!-- screenshot of the comment: docs/comment.png (add after the first real run) -->
 
 ## Why tfreview
