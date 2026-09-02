@@ -94,13 +94,12 @@ func topCategory(r *Result) string {
 }
 
 func writeBadges(b *strs.Builder, r *Result) {
-	overall := "tfreview:" + string(r.Score)
 	if r.Incomplete {
-		overall = "tfreview:unknown"
-	}
-	fmt.Fprintf(b, "![%s](https://img.shields.io/badge/risk-%s-%s)", r.Score, badgeText(string(r.Score)), LabelColor(overall))
-	if r.Incomplete {
-		fmt.Fprintf(b, " ![incomplete](https://img.shields.io/badge/risk-incomplete-%s)", LabelColor("tfreview:unknown"))
+		// バッジは見出しを反映する。Incomplete のときの見出しは "incomplete" のみなので
+		// risk-<score> は出さず、単一の risk-incomplete バッジにする。
+		fmt.Fprintf(b, "![incomplete](https://img.shields.io/badge/risk-incomplete-%s)", LabelColor("tfreview:unknown"))
+	} else {
+		fmt.Fprintf(b, "![%s](https://img.shields.io/badge/risk-%s-%s)", r.Score, badgeText(string(r.Score)), LabelColor("tfreview:"+string(r.Score)))
 	}
 	for _, c := range r.Categories {
 		fmt.Fprintf(b, " ![%s](https://img.shields.io/badge/%s-%d%%2F%d-%s)", c.Title, badgeText(c.Title), c.Hits, c.Total, LabelColor("tfreview:"+string(c.Score)))

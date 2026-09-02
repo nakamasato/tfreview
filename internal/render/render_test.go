@@ -73,8 +73,11 @@ func TestBuildIncomplete(t *testing.T) {
 	require.True(t, r.Incomplete)
 	require.Equal(t, "tfreview:unknown", r.Label)
 	require.Equal(t, []string{"sg-open"}, r.Unevaluated)
-	require.Contains(t, Comment(r), "incomplete")
-	require.Contains(t, Comment(r), "sg-open")
+	body := Comment(r)
+	require.Contains(t, body, "incomplete")
+	require.Contains(t, body, "sg-open")
+	require.Contains(t, body, "img.shields.io/badge/risk-incomplete-0075CA")
+	require.NotContains(t, body, "badge/risk-critical")
 }
 
 func TestCommentGolden(t *testing.T) {
