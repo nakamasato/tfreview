@@ -90,7 +90,13 @@ func stripSensitive(after map[string]any, sensitive json.RawMessage) map[string]
 		return nil
 	}
 	var flags map[string]any
-	_ = json.Unmarshal(sensitive, &flags)
+	if s := string(sensitive); s != "" && s != "false" && s != "null" {
+		if err := json.Unmarshal(sensitive, &flags); err != nil {
+			// after_sensitive claims something is sensitive but we can't tell what;
+			// fail closed and drop the whole `after` rather than possibly leak it.
+			return nil
+		}
+	}
 	out := make(map[string]any, len(after))
 	for k, v := range after {
 		if f, ok := flags[k]; ok && isSensitive(f) {

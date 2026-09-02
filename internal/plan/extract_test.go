@@ -86,6 +86,13 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	require.Equal(t, p, got)
 }
 
+func TestExtractDropsAfterOnUnparsableSensitive(t *testing.T) {
+	raw := `{"resource_changes":[{"address":"x","type":"t","name":"n","change":{"actions":["update"],"before":{"a":1},"after":{"a":2},"after_sensitive":"garbage"}}]}`
+	p, err := Extract([]byte(raw), "x")
+	require.NoError(t, err)
+	require.Nil(t, byAddress(p, "x").After)
+}
+
 func TestExtractRejectsInvalidJSON(t *testing.T) {
 	_, err := Extract([]byte("{"), "x")
 	require.Error(t, err)
