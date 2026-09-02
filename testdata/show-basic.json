@@ -1,0 +1,64 @@
+{
+  "format_version": "1.2",
+  "resource_changes": [
+    {
+      "address": "aws_s3_bucket.logs",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "logs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {"bucket": "logs", "force_destroy": false, "tags": {"env": "prd"}},
+        "after": {"bucket": "logs", "force_destroy": true, "tags": {"env": "prd"}},
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.db.aws_db_instance.main",
+      "module_address": "module.db",
+      "mode": "managed",
+      "type": "aws_db_instance",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {"identifier": "main", "password": "old", "instance_class": "db.t3.small"},
+        "after": {"identifier": "main", "password": "new", "instance_class": "db.t3.medium"},
+        "after_sensitive": {"password": true}
+      }
+    },
+    {
+      "address": "aws_iam_user.alice",
+      "mode": "managed",
+      "type": "aws_iam_user",
+      "name": "alice",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {"actions": ["delete"], "before": {"name": "alice"}, "after": null, "after_sensitive": false}
+    },
+    {
+      "address": "aws_sqs_queue.jobs",
+      "mode": "managed",
+      "type": "aws_sqs_queue",
+      "name": "jobs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {"actions": ["create"], "before": null, "after": {"name": "jobs"}, "after_sensitive": {}}
+    },
+    {
+      "address": "aws_vpc.main",
+      "mode": "managed",
+      "type": "aws_vpc",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {"actions": ["no-op"], "before": {"cidr_block": "10.0.0.0/16"}, "after": {"cidr_block": "10.0.0.0/16"}, "after_sensitive": {}}
+    },
+    {
+      "address": "aws_s3_bucket.imported",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "imported",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {"actions": ["update"], "before": {"bucket": "imported"}, "after": {"bucket": "imported", "force_destroy": false}, "after_sensitive": {}, "importing": {"id": "imported"}}
+    }
+  ]
+}
