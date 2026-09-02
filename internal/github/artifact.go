@@ -19,7 +19,8 @@ type artifact struct {
 	CreatedAt   string `json:"created_at"`
 }
 
-// PR の head に対する成功 run から name の artifact を落として展開する。
+// PR の head に対する run（成功・失敗を問わない）から name の artifact を落として展開する。
+// Action は fail-on で落ちる前に artifact を上げるので、失敗した run も対象に含める。
 // 同名が複数あれば created_at が最新のもの。
 func (c *Client) FetchPlanArtifact(ctx context.Context, pr int, name, outDir string) error {
 	var pull struct {
@@ -35,7 +36,7 @@ func (c *Client) FetchPlanArtifact(ctx context.Context, pr int, name, outDir str
 			ID int64 `json:"id"`
 		} `json:"workflow_runs"`
 	}
-	if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs?head_sha=%s&status=success&per_page=50", c.Repo, pull.Head.SHA), nil, &runs); err != nil {
+	if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs?head_sha=%s&per_page=50", c.Repo, pull.Head.SHA), nil, &runs); err != nil {
 		return err
 	}
 	var best *artifact
@@ -43,7 +44,7 @@ func (c *Client) FetchPlanArtifact(ctx context.Context, pr int, name, outDir str
 		var list struct {
 			Artifacts []artifact `json:"artifacts"`
 		}
-		if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts", c.Repo, run.ID), nil, &list); err != nil {
+		if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100", c.Repo, run.ID), nil, &list); err != nil {
 			return err
 		}
 		for i := range list.Artifacts {

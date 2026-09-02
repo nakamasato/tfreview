@@ -249,7 +249,8 @@ flowchart LR
   | `tfreview:unknown` | 青 `0075CA` |
 
   色はバッジ（shields.io）と同じ対応にする。既存ラベルの色は上書きしない
-- `fetch`: PR の head SHA に対する最新の成功 run から `tfreview-plan` artifact を落として展開。
+- `fetch`: PR の head SHA に対する run（成功・失敗を問わない。Action は fail-on で落とす前に
+  artifact を上げる）から `tfreview-plan` artifact を落として展開。
   無ければ exit 1 で「artifact が無い」ことを明示する（エージェントはこれを見て plan 実行に進む）
 - 認証: `GITHUB_TOKEN` 環境変数、無ければ `gh auth token`
 
