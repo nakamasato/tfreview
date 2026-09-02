@@ -67,6 +67,7 @@ func TestReviewEndToEndWithMock(t *testing.T) {
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
 	cfg := writeCfg(t, dir, mockCfg)
+	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{"prd":[{"check_id":"delete-or-replace","verdict":"hit","reason":"db"},{"check_id":"llm-only","verdict":"miss","reason":"ok"}]}`)
 	outDir := filepath.Join(dir, "out")
 
@@ -85,6 +86,7 @@ func TestReviewFailOn(t *testing.T) {
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
 	cfg := writeCfg(t, dir, mockCfg)
+	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{"prd":[{"check_id":"delete-or-replace","verdict":"hit","reason":"db"},{"check_id":"llm-only","verdict":"hit","reason":"x"}]}`)
 
 	err := run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o1"), "--fail-on", "critical")
@@ -102,6 +104,7 @@ func TestReviewReusesState(t *testing.T) {
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
 	cfg := writeCfg(t, dir, mockCfg)
+	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{"prd":[{"check_id":"delete-or-replace","verdict":"miss","reason":"no"},{"check_id":"llm-only","verdict":"miss","reason":"no"}]}`)
 	o1 := filepath.Join(dir, "o1")
 	require.NoError(t, run(t, "review", "--plan", p, "--config", cfg, "--out-dir", o1))
@@ -126,8 +129,17 @@ func TestReviewInvalidConfigExit2(t *testing.T) {
 func TestReviewNoPlansIsNone(t *testing.T) {
 	dir := t.TempDir()
 	cfg := writeCfg(t, dir, mockCfg)
+	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
 	o := filepath.Join(dir, "o")
 	require.NoError(t, run(t, "review", "--config", cfg, "--out-dir", o))
 	label, _ := os.ReadFile(filepath.Join(o, "label.txt"))
 	require.Equal(t, "tfreview:none\n", string(label))
+}
+
+func TestReviewMockProviderRequiresOptIn(t *testing.T) {
+	dir := t.TempDir()
+	p := extractFixture(t, dir, "prd")
+	cfg := writeCfg(t, dir, mockCfg)
+	err := run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o"))
+	require.Equal(t, 2, exitCode(err))
 }

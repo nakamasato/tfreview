@@ -17,6 +17,12 @@ func newProvider(cfg *config.Config) (llm.Provider, error) {
 	case "anthropic":
 		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
 	case "mock":
+		// mock returns fixed verdicts without calling any LLM; gating it behind an
+		// explicit opt-in keeps a config typo (or a copied test config) from
+		// silently producing fake verdicts in a real run.
+		if os.Getenv("TFREVIEW_ALLOW_MOCK") != "1" {
+			return nil, fmt.Errorf("llm.provider mock requires TFREVIEW_ALLOW_MOCK=1")
+		}
 		return mockFromEnv()
 	}
 	return nil, fmt.Errorf("unsupported provider %q", cfg.LLM.Provider)

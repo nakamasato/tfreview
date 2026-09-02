@@ -82,7 +82,9 @@ tarball from Releases.
 
 Everything lives in `.tfreview.yaml` at the repository root (override the path
 with `--config` / the action's `config` input). Without one, the built-in
-defaults below apply.
+defaults below apply. `llm.provider: mock` (fixed verdicts, no API calls; for
+tests only) additionally requires the environment variable
+`TFREVIEW_ALLOW_MOCK=1`, so it can't accidentally run for real.
 
 ```yaml
 language: en                 # default en. Language of the fixed comment text and LLM instructions
