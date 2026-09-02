@@ -6,7 +6,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -26,8 +25,7 @@ func zipWith(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func TestFetchPlanArtifact(t *testing.T) {
-	archive := zipWith(t, map[string]string{"prd.json": `{"target":"prd"}`, "dev.json": `{"target":"dev"}`})
+func TestListArtifacts(t *testing.T) {
 	var c *Client
 	c, _ = server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
 		switch r.URL.Path {
@@ -39,27 +37,46 @@ func TestFetchPlanArtifact(t *testing.T) {
 		case "/repos/o/r/actions/runs/10/artifacts":
 			_, _ = w.Write([]byte(`{"artifacts":[{"id":100,"name":"tfreview-plan","archive_download_url":"` + c.BaseURL + `/dl/100","created_at":"2026-09-01T00:00:00Z"}]}`))
 		case "/repos/o/r/actions/runs/11/artifacts":
-			_, _ = w.Write([]byte(`{"artifacts":[{"id":110,"name":"other","archive_download_url":"` + c.BaseURL + `/dl/110","created_at":"2026-09-02T00:00:00Z"},{"id":111,"name":"tfreview-plan","archive_download_url":"` + c.BaseURL + `/dl/111","created_at":"2026-09-02T00:00:00Z"}]}`))
-		case "/dl/111":
+			_, _ = w.Write([]byte(`{"artifacts":[{"id":110,"name":"other","archive_download_url":"` + c.BaseURL + `/dl/110","created_at":"2026-09-02T00:00:00Z","size_in_bytes":42,"expired":true},{"id":111,"name":"tfreview-plan","archive_download_url":"` + c.BaseURL + `/dl/111","created_at":"2026-09-02T01:00:00Z"}]}`))
+		default:
+			w.WriteHeader(500)
+		}
+	})
+	artifacts, headSHA, err := c.ListArtifacts(context.Background(), 7)
+	require.NoError(t, err)
+	require.Equal(t, "abc", headSHA)
+	require.Len(t, artifacts, 3)
+	// newest first
+	require.Equal(t, "tfreview-plan", artifacts[0].Name)
+	require.Equal(t, int64(111), artifacts[0].ID)
+	require.True(t, artifacts[1].Expired)
+	require.Equal(t, int64(42), artifacts[1].SizeInBytes)
+}
+
+func TestDownloadArtifact(t *testing.T) {
+	archive := zipWith(t, map[string]string{"prd.json": `{"target":"prd"}`})
+	var c *Client
+	c, _ = server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
+		switch r.URL.Path {
+		case "/dl/1":
 			_, _ = w.Write(archive)
 		default:
 			w.WriteHeader(500)
 		}
 	})
-	dir := t.TempDir()
-	require.NoError(t, c.FetchPlanArtifact(context.Background(), 7, "tfreview-plan", dir))
-	require.FileExists(t, filepath.Join(dir, "prd.json"))
-	require.FileExists(t, filepath.Join(dir, "dev.json"))
+	b, err := c.DownloadArtifact(context.Background(), Artifact{ID: 1, DownloadURL: c.BaseURL + "/dl/1"})
+	require.NoError(t, err)
+	require.Equal(t, archive, b)
 }
 
-// TestFetchPlanArtifactFollowsRedirectWithoutAuth verifies that the PR token
+// TestDownloadArtifactFollowsRedirectWithoutAuth verifies that the PR token
 // used against api.github.com does not leak to the blob store that
 // archive_download_url redirects to. The stdlib http.Client only strips
 // Authorization on redirect when the hostname changes (127.0.0.1 vs
 // "localhost" count as different hosts even though both resolve to the same
 // loopback address), so the blob server here is addressed as "localhost"
 // while the API stub is addressed as "127.0.0.1" to exercise that path.
-func TestFetchPlanArtifactFollowsRedirectWithoutAuth(t *testing.T) {
+func TestDownloadArtifactFollowsRedirectWithoutAuth(t *testing.T) {
 	archive := zipWith(t, map[string]string{"prd.json": `{"target":"prd"}`})
 
 	blobSawAuth := "unset"
@@ -74,12 +91,6 @@ func TestFetchPlanArtifactFollowsRedirectWithoutAuth(t *testing.T) {
 	var c *Client
 	c, _ = server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
 		switch r.URL.Path {
-		case "/repos/o/r/pulls/7":
-			_, _ = w.Write([]byte(`{"head":{"sha":"abc"}}`))
-		case "/repos/o/r/actions/runs":
-			_, _ = w.Write([]byte(`{"workflow_runs":[{"id":10,"created_at":"2026-09-01T00:00:00Z"}]}`))
-		case "/repos/o/r/actions/runs/10/artifacts":
-			_, _ = w.Write([]byte(`{"artifacts":[{"id":100,"name":"tfreview-plan","archive_download_url":"` + c.BaseURL + `/dl/100","created_at":"2026-09-01T00:00:00Z"}]}`))
 		case "/dl/100":
 			http.Redirect(w, r, blobURL, http.StatusFound)
 		default:
@@ -88,13 +99,13 @@ func TestFetchPlanArtifactFollowsRedirectWithoutAuth(t *testing.T) {
 	})
 	require.True(t, strings.HasPrefix(c.BaseURL, "http://127.0.0.1:"), "test requires the API stub on 127.0.0.1, got %s", c.BaseURL)
 
-	dir := t.TempDir()
-	require.NoError(t, c.FetchPlanArtifact(context.Background(), 7, "tfreview-plan", dir))
-	require.FileExists(t, filepath.Join(dir, "prd.json"))
+	b, err := c.DownloadArtifact(context.Background(), Artifact{ID: 100, DownloadURL: c.BaseURL + "/dl/100"})
+	require.NoError(t, err)
+	require.Equal(t, archive, b)
 	require.Empty(t, blobSawAuth, "Authorization must not be forwarded to the cross-host blob redirect")
 }
 
-func TestFetchPlanArtifactNotFound(t *testing.T) {
+func TestListArtifactsEmpty(t *testing.T) {
 	c, _ := server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
 		switch r.URL.Path {
 		case "/repos/o/r/pulls/7":
@@ -103,6 +114,8 @@ func TestFetchPlanArtifactNotFound(t *testing.T) {
 			_, _ = w.Write([]byte(`{"workflow_runs":[]}`))
 		}
 	})
-	err := c.FetchPlanArtifact(context.Background(), 7, "tfreview-plan", t.TempDir())
-	require.ErrorIs(t, err, ErrArtifactNotFound)
+	artifacts, headSHA, err := c.ListArtifacts(context.Background(), 7)
+	require.NoError(t, err)
+	require.Equal(t, "abc", headSHA)
+	require.Empty(t, artifacts)
 }

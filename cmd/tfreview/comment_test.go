@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -191,6 +192,69 @@ func TestFetchWritesFiles(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(dir, "prd.json"))
 	require.NoError(t, err)
 	require.Contains(t, string(b), "prd")
+}
+
+func TestFetchAutoDetectsRawShowJSON(t *testing.T) {
+	rawShowJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_s3_bucket.logs","type":"aws_s3_bucket","name":"logs","change":{"actions":["create"],"before":null,"after":{"bucket":"logs"}}}]}`
+	planArchive := zipBytes(t, map[string]string{"tfplan.json": rawShowJSON})
+	fileArchive := zipBytes(t, map[string]string{"plan.tfplan": "not json"})
+
+	var base string
+	stubGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		if base == "" {
+			base = "http://" + r.Host
+		}
+		switch r.URL.Path {
+		case "/repos/o/r/pulls/7":
+			_, _ = w.Write([]byte(`{"head":{"sha":"abc"}}`))
+		case "/repos/o/r/actions/runs":
+			_, _ = w.Write([]byte(`{"workflow_runs":[{"id":1}]}`))
+		case "/repos/o/r/actions/runs/1/artifacts":
+			_, _ = w.Write([]byte(`{"artifacts":[
+				{"id":9,"name":"terraform_plan_json_gcp-x","archive_download_url":"` + base + `/dl/plan","created_at":"2026-09-01T00:00:00Z"},
+				{"id":10,"name":"terraform_plan_file_gcp-x","archive_download_url":"` + base + `/dl/file","created_at":"2026-09-01T00:00:00Z"}
+			]}`))
+		case "/dl/plan":
+			_, _ = w.Write(planArchive)
+		case "/dl/file":
+			_, _ = w.Write(fileArchive)
+		}
+	})
+	dir := t.TempDir()
+	require.NoError(t, run(t, "fetch", "--pr", "7", "--repo", "o/r", "--out-dir", dir))
+
+	b, err := os.ReadFile(filepath.Join(dir, "gcp-x.json"))
+	require.NoError(t, err)
+	var p struct {
+		Target    string `json:"target"`
+		Resources []any  `json:"resources"`
+	}
+	require.NoError(t, json.Unmarshal(b, &p))
+	require.Equal(t, "gcp-x", p.Target)
+	require.Len(t, p.Resources, 1)
+}
+
+func TestFetchNoUsablePlanArtifactExit1(t *testing.T) {
+	var base string
+	stubGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		if base == "" {
+			base = "http://" + r.Host
+		}
+		switch r.URL.Path {
+		case "/repos/o/r/pulls/7":
+			_, _ = w.Write([]byte(`{"head":{"sha":"abc"}}`))
+		case "/repos/o/r/actions/runs":
+			_, _ = w.Write([]byte(`{"workflow_runs":[{"id":1}]}`))
+		case "/repos/o/r/actions/runs/1/artifacts":
+			_, _ = w.Write([]byte(`{"artifacts":[{"id":9,"name":"build-logs","archive_download_url":"` + base + `/dl","created_at":"2026-09-01T00:00:00Z"}]}`))
+		case "/dl":
+			_, _ = w.Write(zipBytes(t, map[string]string{"notes.txt": "hello"}))
+		}
+	})
+	err := run(t, "fetch", "--pr", "7", "--repo", "o/r", "--out-dir", t.TempDir())
+	require.Equal(t, 1, exitCode(err))
+	require.Contains(t, err.Error(), "no plan artifact")
+	require.Contains(t, err.Error(), "build-logs")
 }
 
 func zipBytes(t *testing.T, files map[string]string) []byte {

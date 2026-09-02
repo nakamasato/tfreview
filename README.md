@@ -64,9 +64,11 @@ monorepo). Without a `.tfreview.yaml` the built-in, provider-neutral checks are
 used. The action outputs `score`, `label`, `incomplete`, and `out-dir` for
 downstream steps.
 
-For local use, `tfreview fetch --pr N` downloads the plan JSON the action
-uploaded for that PR, so you can run `tfreview review` (or hand the plan to an
-AI agent) without re-running `terraform plan`.
+For local use, `tfreview fetch --pr N` downloads the plan JSON for that PR. It
+works out of the box with the `tfreview-plan` artifact the action uploads, and
+also auto-detects raw `terraform show -json` artifacts from other pipelines
+(running `extract` on them itself); use `--target-prefix` if your artifact
+names don't match a common naming convention.
 
 ## CLI
 
@@ -75,7 +77,7 @@ AI agent) without re-running `terraform plan`.
 | `tfreview extract --show-json plan.json --target prd --out prd.json` | Reduce `terraform show -json` to what review needs (`after` only, plus `changed_keys`; `before` never leaves the runner) |
 | `tfreview review --plan prd.json --plan dev.json [--state-in state.json] [--fail-on high]` | Judge; writes `result.json`, `comment.md`, `label.txt`, `state.json` |
 | `tfreview comment --pr 123 [--repo owner/name]` | Upsert the comment and set the label |
-| `tfreview fetch --pr 123 [--repo owner/name] [--out-dir DIR] [--artifact NAME]` | Download the plan JSON a CI run uploaded (`--out-dir` default `tfreview-plans`, `--artifact` default `tfreview-plan`) |
+| `tfreview fetch --pr 123 [--repo owner/name] [--out-dir DIR] [--artifact NAME] [--target-prefix STR]` | Download the plan JSON a CI run uploaded (`--out-dir` default `tfreview-plans`); auto-detects the artifact when `--artifact` is omitted |
 
 `--repo` defaults to the `GITHUB_REPOSITORY` environment variable, then the
 `origin` remote of the current directory (github.com only).

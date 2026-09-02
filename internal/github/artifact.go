@@ -1,35 +1,43 @@
 package github
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
+	"sort"
 )
 
-type artifact struct {
+// Artifact is one GitHub Actions run artifact.
+type Artifact struct {
+	ID          int64
+	Name        string
+	DownloadURL string
+	CreatedAt   string
+	SizeInBytes int64
+	Expired     bool
+}
+
+type artifactJSON struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	DownloadURL string `json:"archive_download_url"`
 	CreatedAt   string `json:"created_at"`
+	SizeInBytes int64  `json:"size_in_bytes"`
+	Expired     bool   `json:"expired"`
 }
 
-// PR の head に対する run（成功・失敗を問わない）から name の artifact を落として展開する。
-// Action は fail-on で落ちる前に artifact を上げるので、失敗した run も対象に含める。
-// 同名が複数あれば created_at が最新のもの。
-func (c *Client) FetchPlanArtifact(ctx context.Context, pr int, name, outDir string) error {
+// ListArtifacts lists every artifact across the workflow runs at the PR's
+// head SHA (successful or not: the action uploads artifacts before a
+// fail-on check would abort the run), newest first, along with the head SHA.
+func (c *Client) ListArtifacts(ctx context.Context, pr int) ([]Artifact, string, error) {
 	var pull struct {
 		Head struct {
 			SHA string `json:"sha"`
 		} `json:"head"`
 	}
 	if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/pulls/%d", c.Repo, pr), nil, &pull); err != nil {
-		return err
+		return nil, "", err
 	}
 	var runs struct {
 		WorkflowRuns []struct {
@@ -37,30 +45,36 @@ func (c *Client) FetchPlanArtifact(ctx context.Context, pr int, name, outDir str
 		} `json:"workflow_runs"`
 	}
 	if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs?head_sha=%s&per_page=50", c.Repo, pull.Head.SHA), nil, &runs); err != nil {
-		return err
+		return nil, "", err
 	}
-	var best *artifact
+	var all []Artifact
 	for _, run := range runs.WorkflowRuns {
 		var list struct {
-			Artifacts []artifact `json:"artifacts"`
+			Artifacts []artifactJSON `json:"artifacts"`
 		}
 		if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100", c.Repo, run.ID), nil, &list); err != nil {
-			return err
+			return nil, "", err
 		}
-		for i := range list.Artifacts {
-			a := list.Artifacts[i]
-			if a.Name == name && (best == nil || a.CreatedAt > best.CreatedAt) {
-				best = &a
-			}
+		for _, a := range list.Artifacts {
+			all = append(all, Artifact{
+				ID:          a.ID,
+				Name:        a.Name,
+				DownloadURL: a.DownloadURL,
+				CreatedAt:   a.CreatedAt,
+				SizeInBytes: a.SizeInBytes,
+				Expired:     a.Expired,
+			})
 		}
 	}
-	if best == nil {
-		return fmt.Errorf("%w: %q for PR #%d (head %s)", ErrArtifactNotFound, name, pr, pull.Head.SHA)
-	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].CreatedAt > all[j].CreatedAt })
+	return all, pull.Head.SHA, nil
+}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", best.DownloadURL, nil)
+// DownloadArtifact fetches an artifact's zip contents.
+func (c *Client) DownloadArtifact(ctx context.Context, a Artifact) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", a.DownloadURL, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// api.github.com requires the token on this first request, but archive_download_url
 	// 302s to a signed, time-limited blob URL on a different host; the stdlib client
@@ -69,43 +83,11 @@ func (c *Client) FetchPlanArtifact(ctx context.Context, pr int, name, outDir str
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("download artifact: %d", resp.StatusCode)
+		return nil, fmt.Errorf("download artifact: %d", resp.StatusCode)
 	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	return unzip(raw, outDir)
-}
-
-func unzip(raw []byte, outDir string) error {
-	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return err
-	}
-	for _, f := range zr.File {
-		if f.FileInfo().IsDir() || strings.Contains(f.Name, "..") {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		b, err := io.ReadAll(rc)
-		rc.Close()
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(outDir, filepath.Base(f.Name)), b, 0o644); err != nil {
-			return err
-		}
-	}
-	return nil
+	return io.ReadAll(resp.Body)
 }
