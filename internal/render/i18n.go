@@ -2,8 +2,8 @@ package render
 
 type strings struct {
 	Risk, Incomplete, Category, Hits, Checks, Check, Level, Verdict, Reason string
-	Targets, Target, Judgement, Reused, Rejudged, JudgedAt, For, Criteria      string
-	NoPlans, NoChanges, Calls, Tokens                                          string
+	Targets, Target, Judgement, Reused, Rejudged, JudgedAt, For, Criteria   string
+	NoPlans, NoChanges, Calls, Tokens                                       string
 }
 
 var texts = map[string]strings{
