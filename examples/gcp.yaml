@@ -20,14 +20,13 @@ categories:
           does replacing an authoritative `google_*_iam_policy`. Read the principal
           from the resource address (for_each key) and `after`.
 
+      # unverifiable: the plan cannot show whether an output change or resource
+      # replacement here breaks a downstream target's terraform_remote_state read,
+      # since the downstream plan did not run.
       - id: shared-target
         level: critical
         match: { targets: [shared, network-prd] }
         verdict_on_match: unverifiable
-        question: |
-          Does this change alter an output or replace a resource that another target
-          reads via terraform_remote_state? Name what breaks downstream, and state
-          that downstream plans did not run.
 
       - id: cloud-run-downtime
         level: high
@@ -44,6 +43,7 @@ categories:
         match:
           actions: [delete]
           types: [google_sql_database_instance, google_storage_bucket, google_bigquery_dataset, google_bigquery_table, google_spanner_instance, google_firestore_database, google_redis_instance]
+        verdict_on_match: ask
         question: |
           Is a resource holding data deleted or replaced? Is there a recovery path?
 

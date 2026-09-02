@@ -80,16 +80,18 @@ func TestDigestChangesWithContent(t *testing.T) {
 
 func TestValidationErrors(t *testing.T) {
 	cases := map[string]string{
-		"bad level":            "categories: [{id: a, title: A, checks: [{id: x, level: severe, question: q}]}]",
-		"bad verdict_on_match": "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {actions: [delete]}, verdict_on_match: maybe}]}]",
-		"unknown match key":    "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {paths: [x]}}]}]",
-		"match not list":       "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {actions: delete}}]}]",
-		"no question no match": "categories: [{id: a, title: A, checks: [{id: x, level: high}]}]",
-		"ask without match":    "categories: [{id: a, title: A, checks: [{id: x, level: high, verdict_on_match: ask, question: q}]}]",
-		"dup check id":         "categories: [{id: a, title: A, checks: [{id: x, level: high, question: q}, {id: x, level: high, question: q}]}]",
-		"dup category id":      "categories: [{id: a, title: A, checks: [{id: x, level: high, question: q}]}, {id: a, title: B, checks: [{id: y, level: high, question: q}]}]",
-		"empty categories":     "categories: []",
-		"bad provider":         "llm: {provider: openai}",
+		"bad level":                      "categories: [{id: a, title: A, checks: [{id: x, level: severe, question: q}]}]",
+		"bad verdict_on_match":           "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {actions: [delete]}, verdict_on_match: maybe}]}]",
+		"unknown match key":              "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {paths: [x]}}]}]",
+		"match not list":                 "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {actions: delete}}]}]",
+		"no question no match":           "categories: [{id: a, title: A, checks: [{id: x, level: high}]}]",
+		"ask without match":              "categories: [{id: a, title: A, checks: [{id: x, level: high, verdict_on_match: ask, question: q}]}]",
+		"dup check id":                   "categories: [{id: a, title: A, checks: [{id: x, level: high, question: q}, {id: x, level: high, question: q}]}]",
+		"dup category id":                "categories: [{id: a, title: A, checks: [{id: x, level: high, question: q}]}, {id: a, title: B, checks: [{id: y, level: high, question: q}]}]",
+		"empty categories":               "categories: []",
+		"bad provider":                   "llm: {provider: openai}",
+		"question inert on hit":          "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {actions: [delete]}, question: q}]}]",
+		"question inert on unverifiable": "categories: [{id: a, title: A, checks: [{id: x, level: high, match: {actions: [delete]}, verdict_on_match: unverifiable, question: q}]}]",
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -159,6 +159,9 @@ func convertCheck(r rawCheck) (model.Check, error) {
 	if on == model.OnMatchAsk && r.Question == "" {
 		return model.Check{}, errorf("check %q: verdict_on_match ask requires question", r.ID)
 	}
+	if !m.IsZero() && (on == model.OnMatchHit || on == model.OnMatchUnverifiable) && r.Question != "" {
+		return model.Check{}, errorf("check %q: question has no effect with verdict_on_match %q; use ask or remove the question", r.ID, on)
+	}
 	return model.Check{ID: r.ID, Level: level, Match: m, OnMatch: on, Question: r.Question}, nil
 }
 
