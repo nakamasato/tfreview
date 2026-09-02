@@ -47,7 +47,8 @@ func TestUpsertCommentCreates(t *testing.T) {
 }
 
 func TestUpsertCommentPatchesExisting(t *testing.T) {
-	existing := "keep me\n" + render.Begin + "\nold\n" + render.End
+	existing := render.Begin + "\nold\n" + render.End
+	newBody := render.Begin + "\nnew\n" + render.End
 	c, calls := server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
 		switch r.Method {
 		case "GET":
@@ -57,13 +58,34 @@ func TestUpsertCommentPatchesExisting(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":5}`))
 		}
 	})
-	require.NoError(t, c.UpsertComment(context.Background(), 7, render.Begin+"\nnew\n"+render.End))
+	require.NoError(t, c.UpsertComment(context.Background(), 7, newBody))
 	last := (*calls)[len(*calls)-1]
 	require.Equal(t, "PATCH", last.method)
 	require.Equal(t, "/repos/o/r/issues/comments/5?", last.path)
-	require.Contains(t, last.body, "keep me")
-	require.Contains(t, last.body, "new")
-	require.NotContains(t, last.body, "old")
+	var sent map[string]string
+	require.NoError(t, json.Unmarshal([]byte(last.body), &sent))
+	require.Equal(t, newBody, sent["body"])
+}
+
+// A comment that merely contains the marker mid-body (someone quoting or
+// discussing tfreview's comment) is not tfreview's own comment: only a body
+// that starts with the marker is replaced, so this must POST a new one.
+func TestUpsertCommentPostsWhenMarkerNotAtStart(t *testing.T) {
+	existing := "keep me\n" + render.Begin + "\nold\n" + render.End
+	c, calls := server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
+		switch r.Method {
+		case "GET":
+			b, _ := json.Marshal([]map[string]any{{"id": 5, "body": existing}})
+			_, _ = w.Write(b)
+		case "POST":
+			w.WriteHeader(201)
+			_, _ = w.Write([]byte(`{"id":6}`))
+		}
+	})
+	require.NoError(t, c.UpsertComment(context.Background(), 7, render.Begin+"\nnew\n"+render.End))
+	last := (*calls)[len(*calls)-1]
+	require.Equal(t, "POST", last.method)
+	require.Equal(t, "/repos/o/r/issues/7/comments?", last.path)
 }
 
 func TestSetLabelReplacesAndCreates(t *testing.T) {

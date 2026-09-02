@@ -23,12 +23,11 @@ func (c *Client) UpsertComment(ctx context.Context, pr int, body string) error {
 			return err
 		}
 		for _, cm := range comments {
-			if strings.Contains(cm.Body, render.Begin) {
-				merged := strings.TrimRight(render.StripBlock(cm.Body), "\n")
-				if merged != "" {
-					merged += "\n\n"
-				}
-				return c.do(ctx, "PATCH", fmt.Sprintf("/repos/%s/issues/comments/%d", c.Repo, cm.ID), map[string]string{"body": merged + body}, nil)
+			// Only a comment that IS ours (starts with our marker) gets replaced.
+			// A comment that merely contains the marker somewhere in its body is
+			// someone else's text quoting or discussing ours, not our comment.
+			if strings.HasPrefix(strings.TrimSpace(cm.Body), render.Begin) {
+				return c.do(ctx, "PATCH", fmt.Sprintf("/repos/%s/issues/comments/%d", c.Repo, cm.ID), map[string]string{"body": body}, nil)
 			}
 		}
 		if len(comments) < 100 {
