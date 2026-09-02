@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -96,8 +97,53 @@ func TestCommentRepoFromEnv(t *testing.T) {
 		_, _ = w.Write([]byte(`{}`))
 	})
 	t.Setenv("GITHUB_REPOSITORY", "env/repo")
-	require.NoError(t, run(t, "comment", "--result", writeResult(t), "--pr", "7", "--no-label"))
+	resultPath, err := filepath.Abs(writeResult(t))
+	require.NoError(t, err)
+
+	// GITHUB_REPOSITORY より下位の git remote を用意し、env が優先されることを確認する。
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init"},
+		{"remote", "add", "origin", "git@github.com:other/repo.git"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	t.Chdir(dir)
+
+	require.NoError(t, run(t, "comment", "--result", resultPath, "--pr", "7", "--no-label"))
 	require.Contains(t, *paths, "POST /repos/env/repo/issues/7/comments")
+}
+
+func TestCommentRepoFromGitRemote(t *testing.T) {
+	paths := stubGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte(`{}`))
+	})
+	resultPath, err := filepath.Abs(writeResult(t))
+	require.NoError(t, err)
+	t.Setenv("GITHUB_REPOSITORY", "")
+
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init"},
+		{"remote", "add", "origin", "git@github.com:env/fromgit.git"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	t.Chdir(dir)
+
+	require.NoError(t, run(t, "comment", "--result", resultPath, "--pr", "7", "--no-label"))
+	require.Contains(t, *paths, "POST /repos/env/fromgit/issues/7/comments")
 }
 
 func TestCommentWithoutTokenExit2(t *testing.T) {

@@ -77,7 +77,8 @@ AI agent) without re-running `terraform plan`.
 | `tfreview comment --pr 123 [--repo owner/name]` | Upsert the comment and set the label |
 | `tfreview fetch --pr 123 [--repo owner/name] [--out-dir DIR] [--artifact NAME]` | Download the plan JSON a CI run uploaded (`--out-dir` default `tfreview-plans`, `--artifact` default `tfreview-plan`) |
 
-`--repo` defaults to the `GITHUB_REPOSITORY` environment variable.
+`--repo` defaults to the `GITHUB_REPOSITORY` environment variable, then the
+`origin` remote of the current directory (github.com only).
 
 `--fail-on-machine-only` narrows `--fail-on` to verdicts a `match` decided
 (deterministic checks, or an `ask` check that fell back to its match result

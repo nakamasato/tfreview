@@ -30,7 +30,7 @@ func newFetchCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&pr, "pr", 0, "pull request number")
-	cmd.Flags().StringVar(&repo, "repo", "", "owner/name (default: GITHUB_REPOSITORY)")
+	cmd.Flags().StringVar(&repo, "repo", "", "owner/name (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&outDir, "out-dir", "tfreview-plans", "directory to extract plan JSON into")
 	cmd.Flags().StringVar(&artifact, "artifact", "tfreview-plan", "artifact name")
 	_ = cmd.MarkFlagRequired("pr")

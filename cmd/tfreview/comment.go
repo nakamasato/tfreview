@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/nakamasato/tfreview/internal/github"
 	"github.com/nakamasato/tfreview/internal/render"
@@ -11,16 +10,6 @@ import (
 )
 
 var newGitHubClient = github.New
-
-func resolveRepo(flag string) (string, error) {
-	if flag != "" {
-		return flag, nil
-	}
-	if v := os.Getenv("GITHUB_REPOSITORY"); v != "" {
-		return v, nil
-	}
-	return "", &exitError{code: 2, msg: "--repo is required (or set GITHUB_REPOSITORY)"}
-}
 
 func githubClient(repoFlag string) (*github.Client, error) {
 	repo, err := resolveRepo(repoFlag)
@@ -69,7 +58,7 @@ func newCommentCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&resultPath, "result", "tfreview-out/result.json", "result.json from `tfreview review`")
 	cmd.Flags().IntVar(&pr, "pr", 0, "pull request number")
-	cmd.Flags().StringVar(&repo, "repo", "", "owner/name (default: GITHUB_REPOSITORY)")
+	cmd.Flags().StringVar(&repo, "repo", "", "owner/name (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().BoolVar(&noLabel, "no-label", false, "do not touch labels")
 	_ = cmd.MarkFlagRequired("pr")
 	return cmd

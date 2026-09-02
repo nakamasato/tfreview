@@ -63,6 +63,12 @@ func newReviewCmd() *cobra.Command {
 			if headSHA == "" {
 				headSHA = gitHead()
 			}
+			if repo == "" {
+				repo = os.Getenv("GITHUB_REPOSITORY")
+			}
+			if repo == "" {
+				repo = gitRemoteRepo()
+			}
 
 			out, err := judge.Run(cmd.Context(), judge.Input{Config: cfg, Plans: ps, Provider: provider, Prev: state.Load(stateIn), HeadSHA: headSHA})
 			if err != nil {
@@ -107,7 +113,7 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&stateIn, "state-in", "", "state.json from the previous run")
 	cmd.Flags().StringVar(&outDir, "out-dir", "tfreview-out", "output directory")
 	cmd.Flags().StringVar(&headSHA, "head-sha", "", "commit being judged (default: git rev-parse HEAD)")
-	cmd.Flags().StringVar(&repo, "repo", "", "owner/name, used only for links")
+	cmd.Flags().StringVar(&repo, "repo", "", "owner/name, used only for links (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit 1 when the score reaches this level (medium|high|critical)")
 	cmd.Flags().BoolVar(&machineOnly, "fail-on-machine-only", false, "with --fail-on, count only deterministic (match) verdicts")
 	return cmd
