@@ -136,9 +136,12 @@ categories:
 	err := run(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o1"), "--fail-on", "critical")
 	require.NoError(t, err)
 
-	// --fail-on-machine-only ignores Incomplete and fails on the machine verdict (critical)
-	err = run(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-machine-only")
+	// --fail-on-machine-only ignores Incomplete and fails on the machine verdict (critical).
+	// The posted label/comment still show tfreview:unknown, so stderr must say so explicitly
+	// or a reviewer sees a failing CI check next to a comment that looks unjudged.
+	_, stderr, err := runCapture(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-machine-only")
 	require.Equal(t, 1, exitCode(err))
+	require.Contains(t, stderr, "tfreview:unknown")
 }
 
 func TestReviewReusesState(t *testing.T) {

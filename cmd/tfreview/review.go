@@ -116,6 +116,13 @@ func newReviewCmd() *cobra.Command {
 					score = result.MachineScore
 				}
 				if model.LevelAtLeast(score, failLevel) {
+					if machineOnly && result.Incomplete {
+						// The posted label/comment (built from the combined score) still
+						// say result.Label here, e.g. "tfreview:unknown", because some LLM
+						// checks were skipped. Without this, a reviewer sees a red CI check
+						// next to a comment that looks like nothing was judged yet.
+						cmd.PrintErrf("note: failing on the machine-only score (%s) even though some LLM checks were skipped; the posted label/comment still read %q\n", score, result.Label)
+					}
 					return &exitError{code: 1, msg: "risk " + string(score) + " reached --fail-on " + failOn}
 				}
 			}
