@@ -12,9 +12,9 @@ var unresolvedNote = map[model.VerdictKind]string{
 	model.VerdictSkipped:      "not evaluated",
 }
 
-// Merge は同じチェックを複数 target が判定した結果から危険な方を残す。
-// 負けた側が「検証不能」「評価できず」だった事実は勝者の reason に残す。
-// 黙って捨てると、その情報がレビュアーに一切届かない。
+// Merge keeps the more severe verdict when multiple targets judge the same check.
+// The fact that a losing verdict was "unverifiable" or "not evaluated" is preserved
+// in the winner's reason — dropping it silently would hide that information from reviewers.
 func Merge(vs []model.Verdict) model.Verdict {
 	winner := vs[0]
 	for _, v := range vs[1:] {

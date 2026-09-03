@@ -1,7 +1,8 @@
-// Package anthropic は Messages API で plan を評価する。
+// Package anthropic evaluates a plan via the Messages API.
 //
-// エージェントではなく単発の呼び出しにしているのは「入力は plan の結果だけ」を
-// 守るため。ツールを持たせるとリポジトリや外部を見に行けてしまう。
+// This is a single one-shot call rather than an agent loop, to preserve the
+// invariant that the only input is the plan result. Giving it tools would let
+// it reach into the repository or the outside world.
 package anthropic
 
 import (
@@ -40,8 +41,9 @@ func (p *Provider) Model() string { return p.opts.Model }
 
 func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, llm.Usage, error) {
 	planJSON := PlanJSON(req.Plan)
-	// 桁違いに大きい入力は判定の質が落ちるうえ、上限に当たると 400 で全チェックが
-	// 失敗になる。原因が容量だと分かる形で返すほうがレビュアーに届く。
+	// An input that's orders of magnitude too large both degrades judgment
+	// quality and, once it hits the limit, fails every check with a 400.
+	// Returning an error that names the cause as size is more useful to the reviewer.
 	if len(planJSON) > p.opts.MaxPlanChars {
 		return nil, llm.Usage{}, fmt.Errorf("%w: %d > %d chars", ErrPlanTooLarge, len(planJSON), p.opts.MaxPlanChars)
 	}

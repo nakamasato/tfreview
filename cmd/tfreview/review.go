@@ -134,8 +134,9 @@ func newReviewCmd() *cobra.Command {
 	return cmd
 }
 
-// config が無ければ組み込みデフォルトで動く。あって壊れていれば exit 2:
-// 観点ゼロで走ると全 PR が緑になるので、落とすのが正しい。
+// If there's no config, fall back to the built-in defaults. If a config exists
+// but is broken, exit 2: running with zero checks would make every PR look
+// green, so failing loudly is the correct behavior.
 func loadConfig(path string) (*config.Config, error) {
 	cfg, err := config.Load(path)
 	if err == nil {

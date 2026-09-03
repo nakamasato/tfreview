@@ -84,15 +84,16 @@ func TestRunMachineAndLLM(t *testing.T) {
 	require.Equal(t, 2, out.Usage.Calls)
 	require.Len(t, out.State.Targets, 2)
 	require.False(t, out.Targets[0].Reused)
-	// ask のチェックは LLM に渡される
+	// ask checks are passed to the LLM
 	require.Contains(t, checkIDs(p.Calls[0].Checks), "delete-or-replace")
-	// match 済みの unverifiable は渡されない
+	// an already-matched unverifiable is not passed
 	require.NotContains(t, checkIDs(p.Calls[0].Checks), "shared")
 }
 
 func TestRunAskFallbackWhenOneTargetFails(t *testing.T) {
-	// dev だけ答えが返り miss。prd は失敗。max merge だと dev の miss が勝って
-	// 「削除が出ている PR が該当なし」になるので、match の hit に戻す。
+	// Only dev answers, with a miss; prd fails. With max-merge, dev's miss would
+	// win and report "no match" on a PR that does have a delete, so we fall back
+	// to match's hit instead.
 	p := &flaky{failTarget: "prd", answers: map[string][]llm.Answer{"dev": {{CheckID: "delete-or-replace", Kind: model.VerdictMiss, Reason: "nothing"}, {CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "n"}}}}
 	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: []*plan.Plan{prd(), dev()}, Provider: p, Prev: state.New("", "")})
 	require.NoError(t, err)
@@ -101,10 +102,10 @@ func TestRunAskFallbackWhenOneTargetFails(t *testing.T) {
 	require.Equal(t, model.SourceMachine, v.Source)
 	require.Contains(t, v.Reason, "using plan facts")
 	require.False(t, out.Unevaluated["delete-or-replace"])
-	// sg-open は prd で skipped → 判定不完全
+	// sg-open was skipped for prd -> judgement is incomplete
 	require.True(t, out.Unevaluated["sg-open"])
 	require.True(t, IsIncomplete(out.Verdicts, out.Unevaluated))
-	// skipped を含む prd は state に書かれない
+	// prd, which includes a skipped verdict, is not written to state
 	_, ok := out.State.Targets["prd"]
 	require.False(t, ok)
 	_, ok = out.State.Targets["dev"]
@@ -128,10 +129,10 @@ func TestRunReusesState(t *testing.T) {
 }
 
 func TestRunMachineMissNotOverriddenByStaleCachedVerdict(t *testing.T) {
-	// prd の今回の plan には delete が無いので match は miss で機械判定される。
-	// しかし state には前回 LLM が hit と判定したときの verdict が残っている
-	// (以前は delete があった、など)。この古い候補で機械判定の miss を
-	// 上書きしてはいけない。
+	// prd's current plan has no delete, so match settles it as a machine miss.
+	// But state still holds the verdict from a previous run where the LLM said hit
+	// (e.g. it had a delete back then). That stale candidate must not override
+	// this run's machine miss.
 	c := runCfgParsed(t)
 	prdNoDelete := &plan.Plan{Target: "prd", Counts: plan.Counts{Add: 1}, Resources: []plan.Resource{{Address: "aws_sqs_queue.q", Type: "aws_sqs_queue", Actions: []string{"create"}}}}
 	prev := state.New("old", c.Digest)
