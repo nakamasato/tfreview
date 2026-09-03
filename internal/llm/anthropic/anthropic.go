@@ -21,7 +21,7 @@ var ErrPlanTooLarge = errors.New("plan exceeds max_plan_chars")
 // パースエラーより先に検知して原因を判定側に伝える。
 var ErrResponseTruncated = errors.New("response truncated by max_tokens")
 
-const defaultMaxTokens = 16000
+const defaultMaxTokens = 128000
 
 type Options struct {
 	Model        string
@@ -83,7 +83,9 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 	if maxTokens == 0 {
 		maxTokens = defaultMaxTokens
 	}
-	resp, err := p.client.Messages.New(ctx, sdk.MessageNewParams{
+	// max_tokens を大きく取るため非ストリーミングだと SDK の HTTP タイムアウトに
+	// 当たりうる。ストリーミングで受けて最終メッセージに組み立て直す。
+	stream := p.client.Messages.NewStreaming(ctx, sdk.MessageNewParams{
 		Model:     sdk.Model(p.opts.Model),
 		MaxTokens: int64(maxTokens),
 		System: []sdk.TextBlockParam{{
@@ -94,8 +96,14 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 		Tools:      []sdk.ToolUnionParam{{OfTool: &tool}},
 		ToolChoice: sdk.ToolChoiceParamOfTool(toolName),
 	})
-	if err != nil {
-		return nil, llm.Usage{}, fmt.Errorf("messages.new: %w", err)
+	resp := &sdk.Message{}
+	for stream.Next() {
+		if err := resp.Accumulate(stream.Current()); err != nil {
+			return nil, llm.Usage{}, fmt.Errorf("messages.new (stream): %w", err)
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, llm.Usage{}, fmt.Errorf("messages.new (stream): %w", err)
 	}
 	usage := llm.Usage{
 		Calls:            1,

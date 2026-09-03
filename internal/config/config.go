@@ -97,7 +97,7 @@ func Parse(raw []byte) (*Config, error) {
 		c.LLM.MaxPlanChars = 100000
 	}
 	if c.LLM.MaxTokens == 0 {
-		c.LLM.MaxTokens = 16000
+		c.LLM.MaxTokens = 128000
 	}
 
 	if len(*rc.Categories) == 0 {

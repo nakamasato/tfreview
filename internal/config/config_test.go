@@ -36,7 +36,7 @@ func TestParseMinimal(t *testing.T) {
 	require.Equal(t, "anthropic", c.LLM.Provider)
 	require.Equal(t, "claude-opus-5", c.LLM.Model)
 	require.Equal(t, 100000, c.LLM.MaxPlanChars)
-	require.Equal(t, 16000, c.LLM.MaxTokens)
+	require.Equal(t, 128000, c.LLM.MaxTokens)
 	require.Len(t, c.Categories, 1)
 	require.Len(t, c.Checks(), 3)
 	require.Regexp(t, `^sha256:[0-9a-f]{64}$`, c.Digest)
