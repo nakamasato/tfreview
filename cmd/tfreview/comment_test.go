@@ -45,8 +45,8 @@ func writeResult(t *testing.T) string {
 
 func TestCommentPostsAndLabels(t *testing.T) {
 	paths := stubGitHub(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == "GET":
+		switch r.Method {
+		case "GET":
 			_, _ = w.Write([]byte(`[]`))
 		default:
 			w.WriteHeader(201)

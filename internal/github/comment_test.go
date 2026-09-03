@@ -32,10 +32,10 @@ func server(t *testing.T, handler func(w http.ResponseWriter, r *http.Request, c
 
 func TestUpsertCommentCreates(t *testing.T) {
 	c, calls := server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
-		switch {
-		case r.Method == "GET":
+		switch r.Method {
+		case "GET":
 			_, _ = w.Write([]byte(`[{"id":1,"body":"unrelated"}]`))
-		case r.Method == "POST":
+		case "POST":
 			w.WriteHeader(201)
 			_, _ = w.Write([]byte(`{"id":2}`))
 		}

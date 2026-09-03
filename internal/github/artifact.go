@@ -56,14 +56,7 @@ func (c *Client) ListArtifacts(ctx context.Context, pr int) ([]Artifact, string,
 			return nil, "", err
 		}
 		for _, a := range list.Artifacts {
-			all = append(all, Artifact{
-				ID:          a.ID,
-				Name:        a.Name,
-				DownloadURL: a.DownloadURL,
-				CreatedAt:   a.CreatedAt,
-				SizeInBytes: a.SizeInBytes,
-				Expired:     a.Expired,
-			})
+			all = append(all, Artifact(a))
 		}
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].CreatedAt > all[j].CreatedAt })
@@ -85,7 +78,7 @@ func (c *Client) DownloadArtifact(ctx context.Context, a Artifact) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("download artifact: %d", resp.StatusCode)
 	}

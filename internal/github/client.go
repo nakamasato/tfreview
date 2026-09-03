@@ -77,7 +77,7 @@ func (c *Client) do(ctx context.Context, method, path string, in any, out any) e
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
 		return &httpError{Status: resp.StatusCode, Body: strings.TrimSpace(string(b))}

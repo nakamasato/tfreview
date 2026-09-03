@@ -154,7 +154,7 @@ func readZipFiles(zipBytes []byte) (map[string][]byte, error) {
 			return nil, err
 		}
 		b, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			return nil, err
 		}

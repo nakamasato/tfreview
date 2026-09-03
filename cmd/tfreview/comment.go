@@ -48,7 +48,7 @@ func newCommentCmd() *cobra.Command {
 			if err := client.SetLabel(cmd.Context(), pr, result.Label); err != nil {
 				// ラベルは補助なので、権限が無いだけならコメントを出せた時点で成功にする。
 				if errors.Is(err, github.ErrLabelForbidden) {
-					fmt.Fprintln(cmd.ErrOrStderr(), "warning: could not create label (needs issues: write):", err)
+					cmd.PrintErrln("warning: could not create label (needs issues: write):", err)
 					return nil
 				}
 				return fmt.Errorf("set label: %w", err)

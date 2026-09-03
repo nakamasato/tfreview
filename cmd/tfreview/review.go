@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,7 +63,7 @@ func newReviewCmd() *cobra.Command {
 			if cfg.LLM.Provider == "anthropic" && os.Getenv("ANTHROPIC_API_KEY") == "" {
 				// report-only tool: a missing key must not stop the run, but a
 				// silent tfreview:unknown with no explanation is worse than noise.
-				fmt.Fprintln(cmd.ErrOrStderr(), "warning: ANTHROPIC_API_KEY is not set; LLM checks will be skipped and the result will be tfreview:unknown")
+				cmd.PrintErrln("warning: ANTHROPIC_API_KEY is not set; LLM checks will be skipped and the result will be tfreview:unknown")
 			}
 			if headSHA == "" {
 				headSHA = gitHead()
@@ -103,7 +102,7 @@ func newReviewCmd() *cobra.Command {
 			cmd.Printf("%s (%s)\n", result.Label, outDir)
 			if result.Incomplete {
 				for _, line := range skippedSummaryLines(result) {
-					fmt.Fprintln(cmd.ErrOrStderr(), line)
+					cmd.PrintErrln(line)
 				}
 			}
 

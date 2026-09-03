@@ -65,7 +65,7 @@ func TestExtractFromStdin(t *testing.T) {
 	dir := t.TempDir()
 	f, err := os.Open(filepath.Join("..", "..", "testdata", "show-basic.json"))
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	cmd := newRootCmd()
 	cmd.SetIn(f)
 	cmd.SetArgs([]string{"extract", "--show-json", "-", "--target", "x", "--out", filepath.Join(dir, "x.json")})
