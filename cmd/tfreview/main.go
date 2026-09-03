@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// exitError は exit code を運ぶ。cobra は error を返すだけなので、
-// main で code に変換する。
+// exitError carries an exit code. cobra only returns an error, so
+// main converts it to a code.
 type exitError struct {
 	code int
 	msg  string
@@ -19,7 +19,7 @@ func (e *exitError) Error() string { return e.msg }
 
 var errAny = errors.New("any")
 
-// version はリリースビルド時に goreleaser の ldflags (-X main.version=...) で埋め込まれる。
+// version is embedded at release build time via goreleaser's ldflags (-X main.version=...).
 var version = "dev"
 
 func exitCode(err error) int {

@@ -1,4 +1,4 @@
-// Package match は plan の事実だけで決まる判定を行う。LLM は関与しない。
+// Package match performs judgments determined purely by plan facts. The LLM is not involved.
 package match
 
 import (

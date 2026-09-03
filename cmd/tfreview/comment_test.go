@@ -101,7 +101,8 @@ func TestCommentRepoFromEnv(t *testing.T) {
 	resultPath, err := filepath.Abs(writeResult(t))
 	require.NoError(t, err)
 
-	// GITHUB_REPOSITORY より下位の git remote を用意し、env が優先されることを確認する。
+	// Set up a git remote that would resolve to a different repo, to confirm
+	// GITHUB_REPOSITORY takes priority over it.
 	dir := t.TempDir()
 	for _, args := range [][]string{
 		{"init"},
@@ -150,7 +151,7 @@ func TestCommentRepoFromGitRemote(t *testing.T) {
 func TestCommentWithoutTokenExit2(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("GH_TOKEN", "")
-	t.Setenv("PATH", t.TempDir()) // gh が見つからないようにする
+	t.Setenv("PATH", t.TempDir()) // make sure `gh` can't be found
 	err := run(t, "comment", "--result", writeResult(t), "--pr", "7", "--repo", "o/r")
 	require.Equal(t, 2, exitCode(err))
 }

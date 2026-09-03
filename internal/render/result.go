@@ -1,4 +1,4 @@
-// Package render は judge の出力を result.json と PR コメントに変換する。
+// Package render converts judge output into result.json and a PR comment.
 package render
 
 import (

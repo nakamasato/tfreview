@@ -83,8 +83,8 @@ func classify(actions []string) string {
 	return ""
 }
 
-// after_sensitive は after と同じ形で、sensitive な位置に true が立つ。
-// トップレベルの属性だけ見る（ネストした sensitive は属性ごと落とす）。
+// after_sensitive mirrors the shape of after, with true set at sensitive positions.
+// Only top-level attributes are considered (a nested sensitive flag drops the whole attribute).
 func stripSensitive(after map[string]any, sensitive json.RawMessage) map[string]any {
 	if after == nil {
 		return nil

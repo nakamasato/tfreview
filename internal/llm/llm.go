@@ -1,4 +1,4 @@
-// Package llm は判定に使う LLM の抽象。実装は anthropic と mock。
+// Package llm is the abstraction for the LLM used in judging. Implementations are anthropic and mock.
 package llm
 
 import (
@@ -36,7 +36,7 @@ func (u *Usage) Add(o Usage) {
 	u.OutputTokens += o.OutputTokens
 }
 
-// Pricing は USD / Mtok。コメントのフッターに概算を出すためだけに使い、判定には効かない。
+// Pricing is USD / Mtok. It's used only to show an estimate in the comment footer and has no effect on judging.
 type Pricing struct {
 	Input      float64
 	CacheWrite float64

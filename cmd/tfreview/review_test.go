@@ -104,7 +104,7 @@ func TestReviewFailOn(t *testing.T) {
 	err := run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o1"), "--fail-on", "critical")
 	require.Equal(t, 1, exitCode(err))
 
-	// machine-only: ask が LLM で hit と答えているので machine score は none → 落ちない
+	// machine-only: the LLM answers "hit", so the machine score stays none and doesn't fail
 	err = run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-machine-only")
 	require.NoError(t, err)
 
@@ -121,7 +121,8 @@ func TestReviewReusesState(t *testing.T) {
 	o1 := filepath.Join(dir, "o1")
 	require.NoError(t, run(t, "review", "--plan", p, "--config", cfg, "--out-dir", o1))
 
-	// 2 回目は state を渡す。mock の答えを変えても再利用されるので結果は同じ
+	// The second run passes in state. Even with different mock answers the
+	// cached verdict is reused, so the result stays the same.
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{"prd":[{"check_id":"delete-or-replace","verdict":"hit","reason":"changed"},{"check_id":"llm-only","verdict":"hit","reason":"changed"}]}`)
 	o2 := filepath.Join(dir, "o2")
 	require.NoError(t, run(t, "review", "--plan", p, "--config", cfg, "--out-dir", o2, "--state-in", filepath.Join(o1, "state.json")))

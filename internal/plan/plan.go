@@ -1,4 +1,4 @@
-// Package plan は terraform show -json を判定に必要な形に絞った Plan を扱う。
+// Package plan handles a Plan reduced from `terraform show -json` to only what judging needs.
 package plan
 
 import (
@@ -35,8 +35,8 @@ type Plan struct {
 
 func (p *Plan) HasChanges() bool { return len(p.Resources) > 0 }
 
-// Digest は state のキーに使う。encoding/json は map のキーをソートするので、
-// 同じ内容なら同じ bytes になる。
+// Digest is used as the state key. encoding/json sorts map keys, so the same
+// content always marshals to the same bytes.
 func (p *Plan) Digest() string {
 	b, _ := json.Marshal(p)
 	sum := sha256.Sum256(b)
