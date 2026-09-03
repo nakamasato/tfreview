@@ -27,6 +27,13 @@ type artifactJSON struct {
 	Expired     bool   `json:"expired"`
 }
 
+// maxListPages caps the number of pages fetched for a single paginated
+// listing (workflow runs, or artifacts within one run). It guards against an
+// endless loop if the API ever kept reporting a full page; at 100 items per
+// page that's still tens of thousands of items, far more than any real PR
+// produces.
+const maxListPages = 100
+
 // ListArtifacts lists every artifact across the workflow runs at the PR's
 // head SHA (successful or not: the action uploads artifacts before a
 // fail-on check would abort the run), newest first, along with the head SHA.
@@ -39,24 +46,43 @@ func (c *Client) ListArtifacts(ctx context.Context, pr int) ([]Artifact, string,
 	if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/pulls/%d", c.Repo, pr), nil, &pull); err != nil {
 		return nil, "", err
 	}
-	var runs struct {
-		WorkflowRuns []struct {
-			ID int64 `json:"id"`
-		} `json:"workflow_runs"`
-	}
-	if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs?head_sha=%s&per_page=50", c.Repo, pull.Head.SHA), nil, &runs); err != nil {
-		return nil, "", err
-	}
-	var all []Artifact
-	for _, run := range runs.WorkflowRuns {
-		var list struct {
-			Artifacts []artifactJSON `json:"artifacts"`
+	const runsPerPage = 50
+	var runIDs []int64
+	for page := 1; page <= maxListPages; page++ {
+		var runs struct {
+			WorkflowRuns []struct {
+				ID int64 `json:"id"`
+			} `json:"workflow_runs"`
 		}
-		if err := c.do(ctx, "GET", fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100", c.Repo, run.ID), nil, &list); err != nil {
+		path := fmt.Sprintf("/repos/%s/actions/runs?head_sha=%s&per_page=%d&page=%d", c.Repo, pull.Head.SHA, runsPerPage, page)
+		if err := c.do(ctx, "GET", path, nil, &runs); err != nil {
 			return nil, "", err
 		}
-		for _, a := range list.Artifacts {
-			all = append(all, Artifact(a))
+		for _, run := range runs.WorkflowRuns {
+			runIDs = append(runIDs, run.ID)
+		}
+		if len(runs.WorkflowRuns) < runsPerPage {
+			break
+		}
+	}
+
+	const artifactsPerPage = 100
+	var all []Artifact
+	for _, runID := range runIDs {
+		for page := 1; page <= maxListPages; page++ {
+			var list struct {
+				Artifacts []artifactJSON `json:"artifacts"`
+			}
+			path := fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=%d&page=%d", c.Repo, runID, artifactsPerPage, page)
+			if err := c.do(ctx, "GET", path, nil, &list); err != nil {
+				return nil, "", err
+			}
+			for _, a := range list.Artifacts {
+				all = append(all, Artifact(a))
+			}
+			if len(list.Artifacts) < artifactsPerPage {
+				break
+			}
 		}
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].CreatedAt > all[j].CreatedAt })
