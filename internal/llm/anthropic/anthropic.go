@@ -16,9 +16,9 @@ import (
 
 var ErrPlanTooLarge = errors.New("plan exceeds max_plan_chars")
 
-// ErrResponseTruncated は Messages API の応答が max_tokens で打ち切られたことを示す。
-// tool_use の Input が不完全な JSON になり ParseAnswers が失敗するため、その一般的な
-// パースエラーより先に検知して原因を判定側に伝える。
+// ErrResponseTruncated means the Messages API response was cut off by max_tokens.
+// The tool_use Input ends up as incomplete JSON that fails ParseAnswers, so this is
+// detected ahead of that generic parse error to surface the real cause to the judge.
 var ErrResponseTruncated = errors.New("response truncated by max_tokens")
 
 const defaultMaxTokens = 128000
@@ -83,8 +83,8 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 	if maxTokens == 0 {
 		maxTokens = defaultMaxTokens
 	}
-	// max_tokens を大きく取るため非ストリーミングだと SDK の HTTP タイムアウトに
-	// 当たりうる。ストリーミングで受けて最終メッセージに組み立て直す。
+	// max_tokens is large enough here that a non-streaming call risks hitting the
+	// SDK's HTTP timeout, so stream the response and reassemble the final message.
 	stream := p.client.Messages.NewStreaming(ctx, sdk.MessageNewParams{
 		Model:     sdk.Model(p.opts.Model),
 		MaxTokens: int64(maxTokens),
@@ -124,9 +124,9 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 	return nil, usage, errors.New("response has no tool_use block")
 }
 
-// checkTruncated は、tool_use の Input を不完全な JSON としてパース失敗させる前に
-// 「max_tokens で打ち切られた」ことを検知する。ParseAnswers のエラーだけでは容量
-// オーバーが原因だと判別できず、レビュアーに伝わらない。
+// checkTruncated detects that the response was cut off by max_tokens before the
+// tool_use Input fails to parse as incomplete JSON. A ParseAnswers error alone
+// can't tell the reviewer the cause was a token-budget overrun.
 func checkTruncated(resp *sdk.Message, maxTokens int, numChecks int) error {
 	if resp.StopReason == sdk.StopReasonMaxTokens {
 		return fmt.Errorf("%w: max_tokens=%d, checks=%d", ErrResponseTruncated, maxTokens, numChecks)
