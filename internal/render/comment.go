@@ -24,11 +24,11 @@ func Comment(r *Result) string {
 	// in case they fail to load and the information would otherwise be lost.
 	switch {
 	case r.Incomplete:
+		suffix := ""
 		if len(r.Unevaluated) > 0 {
-			fmt.Fprintf(&b, "## 🔵 %s: %s (%s)\n\n", s.Risk, s.Incomplete, strings.Join(r.Unevaluated, ", "))
-		} else {
-			fmt.Fprintf(&b, "## 🔵 %s: %s\n\n", s.Risk, s.Incomplete)
+			suffix = " (" + strings.Join(r.Unevaluated, ", ") + ")"
 		}
+		fmt.Fprintf(&b, "## 🔵 %s: %s%s\n\n", s.Risk, s.Incomplete, suffix)
 	case r.Score == model.LevelNone:
 		fmt.Fprintf(&b, "## 🟢 %s: none\n\n", s.Risk)
 	default:
