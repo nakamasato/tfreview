@@ -1,7 +1,9 @@
 # tfreview
 
-Review a `terraform plan` against the risks *you* define, and post the verdict to
-the pull request as one comment and one `tfreview:*` label.
+A CLI and a GitHub Action that review a `terraform plan` against the risks *you*
+define, and post the verdict to the pull request as one comment and one
+`tfreview:*` label. The action runs the same CLI, so the verdict you get in CI is
+the verdict you get on your laptop.
 
 > Status: alpha. Until `v1`, any release may contain breaking changes — to the
 > flags, the config schema, the output files, or the action inputs.
