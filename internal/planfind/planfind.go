@@ -7,9 +7,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/nakamasato/tfreview/internal/plan"
@@ -22,6 +25,13 @@ const (
 	KindRaw
 	KindReduced
 )
+
+// maxUncompressedBytes bounds how many decompressed bytes readZipFiles will
+// produce from a single artifact zip (per file and in total), defending
+// against zip bombs. The compressed-size check the caller does against the
+// artifact metadata only bounds the size on disk, not what a small archive
+// can expand to.
+const maxUncompressedBytes = 200 * 1024 * 1024
 
 // builtinPrefixes are stripped from an artifact name to derive a target name,
 // in order, before falling back to the name as-is. They cover the artifact
@@ -91,15 +101,49 @@ func FromZip(zipBytes []byte, artifactName string, extraPrefixes []string) ([]Fo
 	if err != nil {
 		return nil, err
 	}
-	var found []Found
-	for name, b := range files {
+
+	// Iterate in a deterministic order (map iteration order is random in
+	// Go), so that which entry "wins" a target name collision doesn't change
+	// from run to run.
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	type entry struct {
+		name string
+		kind Kind
+		b    []byte
+	}
+	var entries []entry
+	rawCount := 0
+	for _, name := range names {
 		if !strings.HasSuffix(strings.ToLower(name), ".json") {
 			continue
 		}
-		switch Classify(b) {
+		b := files[name]
+		kind := Classify(b)
+		if kind == KindRaw {
+			rawCount++
+		}
+		entries = append(entries, entry{name: name, kind: kind, b: b})
+	}
+
+	baseTarget := TargetFromArtifact(artifactName, extraPrefixes)
+	var found []Found
+	for _, e := range entries {
+		switch e.kind {
 		case KindRaw:
-			target := TargetFromArtifact(artifactName, extraPrefixes)
-			p, err := plan.Extract(b, target)
+			target := baseTarget
+			if rawCount > 1 {
+				// The artifact name alone can't tell multiple raw show-json
+				// files in the same artifact apart (they'd all derive the
+				// same target and silently collide), so fold in something
+				// derived from the entry's own path within the zip.
+				target = baseTarget + "-" + rawEntrySuffix(e.name)
+			}
+			p, err := plan.Extract(e.b, target)
 			if err != nil {
 				// Looked like raw show-json (format_version + resource_changes)
 				// but didn't actually parse as one; skip rather than fail the
@@ -109,7 +153,7 @@ func FromZip(zipBytes []byte, artifactName string, extraPrefixes []string) ([]Fo
 			found = append(found, Found{Target: target, Kind: KindRaw, Plan: p})
 		case KindReduced:
 			var p plan.Plan
-			if err := json.Unmarshal(b, &p); err != nil {
+			if err := json.Unmarshal(e.b, &p); err != nil {
 				continue
 			}
 			found = append(found, Found{Target: p.Target, Kind: KindReduced, Plan: &p})
@@ -118,9 +162,30 @@ func FromZip(zipBytes []byte, artifactName string, extraPrefixes []string) ([]Fo
 	return found, nil
 }
 
-// ExtractAll writes every file in a CI artifact zip into outDir under its
-// original base name, for the `tfreview-plan` artifact whose contents are
-// already reduced plans named `<target>.json` by convention.
+// rawEntrySuffix derives a short, filesystem-safe suffix from a zip entry's
+// path, used to tell apart multiple raw show-json plans found within the
+// same artifact.
+func rawEntrySuffix(entryPath string) string {
+	dir := path.Dir(entryPath)
+	base := strings.TrimSuffix(path.Base(entryPath), path.Ext(entryPath))
+	suffix := base
+	if dir != "." && dir != "/" {
+		suffix = strings.Trim(dir, "/")
+		suffix = strings.ReplaceAll(suffix, "/", "-") + "-" + base
+	}
+	suffix = strings.ReplaceAll(suffix, string(filepath.Separator), "-")
+	suffix = strings.ReplaceAll(suffix, "..", "-")
+	suffix = strings.Trim(suffix, "-")
+	if suffix == "" {
+		suffix = "plan"
+	}
+	return suffix
+}
+
+// ExtractAll writes every file in a CI artifact zip into outDir, preserving
+// the entry's path within the zip. Used for the `tfreview-plan` artifact,
+// whose contents are already reduced plans (conventionally flat
+// `<target>.json` files, but nothing stops a producer from nesting them).
 func ExtractAll(zipBytes []byte, outDir string) error {
 	files, err := readZipFiles(zipBytes)
 	if err != nil {
@@ -130,7 +195,11 @@ func ExtractAll(zipBytes []byte, outDir string) error {
 		return err
 	}
 	for name, b := range files {
-		if err := os.WriteFile(filepath.Join(outDir, name), b, 0o644); err != nil {
+		dest := filepath.Join(outDir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dest, b, 0o644); err != nil {
 			return err
 		}
 	}
@@ -138,27 +207,65 @@ func ExtractAll(zipBytes []byte, outDir string) error {
 }
 
 // readZipFiles extracts every regular file from a zip archive, keyed by its
-// base name. Entries whose path contains ".." are skipped (zip-slip).
+// full path within the archive (not just its base name), so that entries
+// with the same file name in different directories don't clobber each other.
+// Entries that look like a zip-slip attempt are skipped, and both per-file
+// and total decompressed size are capped to guard against zip bombs.
 func readZipFiles(zipBytes []byte) (map[string][]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
 	if err != nil {
 		return nil, err
 	}
 	out := map[string][]byte{}
+	var total int64
 	for _, f := range zr.File {
-		if f.FileInfo().IsDir() || strings.Contains(f.Name, "..") {
+		if f.FileInfo().IsDir() || !isSafeZipEntryName(f.Name) {
 			continue
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, err
 		}
-		b, err := io.ReadAll(rc)
+		b, err := io.ReadAll(io.LimitReader(rc, maxUncompressedBytes+1))
 		_ = rc.Close()
 		if err != nil {
 			return nil, err
 		}
-		out[filepath.Base(f.Name)] = b
+		if int64(len(b)) > maxUncompressedBytes {
+			return nil, fmt.Errorf("planfind: entry %q exceeds max uncompressed size of %d bytes", f.Name, maxUncompressedBytes)
+		}
+		total += int64(len(b))
+		if total > maxUncompressedBytes {
+			return nil, fmt.Errorf("planfind: archive exceeds max total uncompressed size of %d bytes", maxUncompressedBytes)
+		}
+		out[f.Name] = b
 	}
 	return out, nil
+}
+
+// isSafeZipEntryName reports whether a zip entry's path is safe to extract:
+// relative, and never escaping the extraction root via "..", however it's
+// spelled. A plain strings.Contains(name, "..") check (the previous approach)
+// is too weak: it doesn't catch an absolute path, and cleaning the path can
+// reveal a ".." that wasn't contiguous in the raw entry name.
+func isSafeZipEntryName(name string) bool {
+	if name == "" {
+		return false
+	}
+	// Zip entry names always use "/", regardless of OS; check each raw
+	// segment before cleaning, since Clean can collapse a segment like
+	// "a/../.." down to something that looks safe once merged.
+	for _, part := range strings.Split(name, "/") {
+		if part == ".." {
+			return false
+		}
+	}
+	cleaned := path.Clean(name)
+	if path.IsAbs(cleaned) {
+		return false
+	}
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return false
+	}
+	return true
 }
