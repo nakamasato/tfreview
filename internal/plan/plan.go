@@ -25,6 +25,7 @@ type Resource struct {
 	Actions       []string       `json:"actions"`
 	After         map[string]any `json:"after"`
 	ChangedKeys   []string       `json:"changed_keys,omitempty"`
+	UnknownKeys   []string       `json:"unknown_keys,omitempty"`
 }
 
 type Plan struct {
