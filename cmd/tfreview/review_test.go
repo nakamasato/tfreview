@@ -112,9 +112,9 @@ func TestReviewFailOn(t *testing.T) {
 	require.Equal(t, 2, exitCode(err))
 }
 
-// --fail-on-machine-only は LLM が使えなくても機能する必要がある。llm-only の
-// 判定が skipped (Incomplete) でも、machine 判定だけで critical に達していれば
-// exit 1 になることを確認する。
+// --fail-on-machine-only must work even when the LLM is unavailable. Verify that
+// it exits 1 once the machine verdicts alone reach critical, even while the
+// llm-only verdict is skipped (Incomplete).
 func TestReviewFailOnMachineOnlyIgnoresIncomplete(t *testing.T) {
 	const cfg = `
 llm: {provider: mock}
@@ -129,14 +129,14 @@ categories:
 	p := extractFixture(t, dir, "prd")
 	cfgPath := writeCfg(t, dir, cfg)
 	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
-	// llm-only への答えを返さないので、その判定は skipped → result.Incomplete = true
+	// No answer is returned for llm-only, so that verdict is skipped -> result.Incomplete = true
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{}`)
 
-	// デフォルト (machineOnly=false) は Incomplete のとき fail-on 判定自体をスキップする
+	// The default (machineOnly=false) skips the fail-on check entirely when Incomplete
 	err := run(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o1"), "--fail-on", "critical")
 	require.NoError(t, err)
 
-	// --fail-on-machine-only は Incomplete を無視して machine 判定 (critical) で落ちる
+	// --fail-on-machine-only ignores Incomplete and fails on the machine verdict (critical)
 	err = run(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-machine-only")
 	require.Equal(t, 1, exitCode(err))
 }

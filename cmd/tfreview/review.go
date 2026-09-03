@@ -106,10 +106,10 @@ func newReviewCmd() *cobra.Command {
 				}
 			}
 
-			// --fail-on-machine-only は LLM の可用性に関わらず決定的にブロックする
-			// ためのフラグなので、machineOnly のときは result.Incomplete（LLM 判定の
-			// skip 由来）を無視して MachineScore だけで判定する。デフォルト
-			// (machineOnly=false) は従来どおり Incomplete なら fail-on をスキップする。
+			// --fail-on-machine-only exists to block deterministically regardless of
+			// LLM availability, so when machineOnly is set, ignore result.Incomplete
+			// (which stems from a skipped LLM verdict) and judge on MachineScore alone.
+			// The default (machineOnly=false) keeps skipping fail-on on Incomplete.
 			if failOn != "" && (machineOnly || !result.Incomplete) {
 				score := result.Score
 				if machineOnly {
