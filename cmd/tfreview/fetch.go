@@ -38,6 +38,12 @@ func newFetchCmd() *cobra.Command {
 					if a.Name != "tfreview-plan" {
 						continue
 					}
+					if a.Expired || a.SizeInBytes > maxArtifactBytes {
+						// Not usable; artifacts is newest-first, so keep
+						// looking for an older tfreview-plan artifact before
+						// falling back to the generic loop below.
+						continue
+					}
 					raw, err := client.DownloadArtifact(cmd.Context(), a)
 					if err != nil {
 						return err
@@ -83,6 +89,14 @@ func newFetchCmd() *cobra.Command {
 					return err
 				}
 				for _, f := range found {
+					if !isValidTargetName(f.Target) {
+						// f.Target comes from inside the artifact zip (an
+						// untrusted, other-party-uploaded file) and is used
+						// to build the output path below; never let it
+						// write outside outDir.
+						cmd.PrintErrf("warning: skipping entry with unsafe target %q from artifact %s\n", f.Target, a.Name)
+						continue
+					}
 					any = true
 					if prev, ok := written[f.Target]; ok {
 						// candidates is newest-first, so the first artifact to
@@ -124,4 +138,22 @@ func newFetchCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&targetPrefixes, "target-prefix", nil, "artifact name prefix to strip when deriving a target name (repeatable; checked before the built-in prefixes)")
 	_ = cmd.MarkFlagRequired("pr")
 	return cmd
+}
+
+// isValidTargetName reports whether a target name derived from inside an
+// artifact zip is safe to use as a filename component. Targets come from
+// content someone else uploaded (a raw plan's artifact name, or the "target"
+// field of an already-reduced plan file), so they must never be allowed to
+// escape outDir when joined into an output path.
+func isValidTargetName(target string) bool {
+	if target == "" {
+		return false
+	}
+	if strings.ContainsAny(target, `/\`) {
+		return false
+	}
+	if strings.Contains(target, "..") {
+		return false
+	}
+	return true
 }
