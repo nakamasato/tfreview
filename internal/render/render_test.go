@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nakamasato/tfreview/internal/config"
@@ -78,6 +79,38 @@ func TestBuildIncomplete(t *testing.T) {
 	require.Contains(t, body, "sg-open")
 	require.Contains(t, body, "img.shields.io/badge/risk-incomplete-0075CA")
 	require.NotContains(t, body, "badge/risk-critical")
+}
+
+func TestCommentIncompleteWithoutUnevaluated(t *testing.T) {
+	r := &Result{
+		Score: model.LevelNone, Incomplete: true, Label: "tfreview:unknown",
+		Language: "en", Unevaluated: []string{}, Targets: []TargetResult{}, Categories: []CategoryResult{},
+		HeadSHA: "abc1234", JudgedAt: "2026-09-02T00:00:00Z",
+	}
+	body := Comment(r)
+	require.Contains(t, body, "## 🔵 Risk: incomplete\n\n")
+	require.NotContains(t, body, "incomplete ()")
+}
+
+func TestCellEscapesMarkerLikeReason(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	out.Verdicts["sg-open"] = model.Verdict{
+		CheckID: "sg-open", Kind: model.VerdictHit, Source: model.SourceLLM,
+		Reason: "quoting plan output that contains " + Begin + " and " + End + " literally",
+	}
+	body := Comment(Build(c, out, meta))
+
+	// Begin/End must still appear exactly once each, at the real header and footer.
+	require.Equal(t, 1, strings.Count(body, Begin))
+	require.Equal(t, 1, strings.Count(body, End))
+	require.True(t, strings.HasPrefix(body, Begin+"\n"))
+	require.True(t, strings.HasSuffix(body, End+"\n"))
+
+	// StripBlock must still remove exactly the intended header-to-footer block.
+	stripped := StripBlock(body)
+	require.NotContains(t, stripped, Begin)
+	require.NotContains(t, stripped, End)
+	require.Empty(t, strings.TrimSpace(stripped))
 }
 
 func TestCommentGolden(t *testing.T) {

@@ -24,7 +24,11 @@ func Comment(r *Result) string {
 	// サービスなので、落ちたときに情報が消えないよう見出しの重複として置く。
 	switch {
 	case r.Incomplete:
-		fmt.Fprintf(&b, "## 🔵 %s: %s (%s)\n\n", s.Risk, s.Incomplete, strings.Join(r.Unevaluated, ", "))
+		if len(r.Unevaluated) > 0 {
+			fmt.Fprintf(&b, "## 🔵 %s: %s (%s)\n\n", s.Risk, s.Incomplete, strings.Join(r.Unevaluated, ", "))
+		} else {
+			fmt.Fprintf(&b, "## 🔵 %s: %s\n\n", s.Risk, s.Incomplete)
+		}
 	case r.Score == model.LevelNone:
 		fmt.Fprintf(&b, "## 🟢 %s: none\n\n", s.Risk)
 	default:
@@ -141,7 +145,19 @@ func writeTargets(b *strings.Builder, r *Result, s texts) {
 func cell(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.ReplaceAll(s, "|", `\|`)
+	s = strings.ReplaceAll(s, "|", `\|`)
+	return escapeHTMLComments(s)
+}
+
+// LLM が生成する reason は自由記述であり、"<!-- tfreview:end -->" のような Begin/End
+// マーカーと同じ文字列がたまたま含まれる可能性がある。そのまま出力すると次回の
+// UpsertComment / StripBlock がコメント本文中のこの部分をマーカーと誤認識し、
+// コメント全体の境界がずれてしまう。HTML コメント構文として解釈されないよう
+// 開始・終了トークンを無害化する。
+func escapeHTMLComments(s string) string {
+	s = strings.ReplaceAll(s, "<!--", "&lt;!--")
+	s = strings.ReplaceAll(s, "-->", "--&gt;")
+	return s
 }
 
 func commas(n int64) string {
