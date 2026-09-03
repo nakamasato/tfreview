@@ -113,6 +113,33 @@ func TestCellEscapesMarkerLikeReason(t *testing.T) {
 	require.Empty(t, strings.TrimSpace(stripped))
 }
 
+// The marker string can also reach the comment body through PR-controlled
+// config/plan data, not just an LLM-generated Reason: a .tfreview.yaml category
+// title or check ID, or a plan/artifact-derived target name. Escaping must apply
+// to the whole body (see wrap), not only to Reason.
+func TestCommentEscapesMarkerLikeConfigAndTargetData(t *testing.T) {
+	r := &Result{
+		Score: model.LevelCritical, Label: "tfreview:critical", Language: "en",
+		Unevaluated: []string{End}, HeadSHA: "abc1234", JudgedAt: "2026-09-02T00:00:00Z",
+		Categories: []CategoryResult{{
+			ID: "cat", Title: "cat " + End, Score: model.LevelCritical, Hits: 1, Total: 1,
+			Checks: []CheckResult{{ID: "check " + End, Level: model.LevelCritical, Verdict: model.VerdictHit, Reason: "ok", Source: model.SourceMachine}},
+		}},
+		Targets: []TargetResult{{Target: "prd " + End}},
+	}
+	body := Comment(r)
+
+	require.Equal(t, 1, strings.Count(body, Begin))
+	require.Equal(t, 1, strings.Count(body, End))
+	require.True(t, strings.HasPrefix(body, Begin+"\n"))
+	require.True(t, strings.HasSuffix(body, End+"\n"))
+
+	stripped := StripBlock(body)
+	require.NotContains(t, stripped, Begin)
+	require.NotContains(t, stripped, End)
+	require.Empty(t, strings.TrimSpace(stripped))
+}
+
 func TestCommentGolden(t *testing.T) {
 	for _, lang := range []string{"en", "ja"} {
 		t.Run(lang, func(t *testing.T) {

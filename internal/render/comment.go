@@ -18,10 +18,10 @@ var levelEmoji = map[model.Level]string{model.LevelNone: "🟢", model.LevelMedi
 func Comment(r *Result) string {
 	s := t(r.Language)
 	var b strings.Builder
-	b.WriteString(Begin + "\n")
 
-	// 見出しはテキストだけで危険度が読めるようにする。バッジ（shields.io）は外部
-	// サービスなので、落ちたときに情報が消えないよう見出しの重複として置く。
+	// The heading is worded so the risk reads from plain text alone. Badges
+	// (shields.io) are an external service, so duplicate the heading as text
+	// in case they fail to load and the information would otherwise be lost.
 	switch {
 	case r.Incomplete:
 		if len(r.Unevaluated) > 0 {
@@ -38,8 +38,7 @@ func Comment(r *Result) string {
 	if r.NoPlans {
 		b.WriteString(s.NoPlans + "\n\n")
 		writeMeta(&b, r, s)
-		b.WriteString(End + "\n")
-		return b.String()
+		return wrap(b.String())
 	}
 
 	writeBadges(&b, r)
@@ -48,8 +47,7 @@ func Comment(r *Result) string {
 	if r.NoChanges {
 		b.WriteString(s.NoChanges + "\n\n")
 		writeTargets(&b, r, s)
-		b.WriteString(End + "\n")
-		return b.String()
+		return wrap(b.String())
 	}
 
 	fmt.Fprintf(&b, "| %s | %s | %s |\n| --- | --- | --- |\n", s.Category, s.Risk, s.Hits)
@@ -84,8 +82,18 @@ func Comment(r *Result) string {
 		fmt.Fprintf(&b, "<sub>%s · %d %s · in %s / cache write %s / cache read %s / out %s %s · ≈ $%.4f</sub>\n",
 			r.Model, u.Calls, s.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), s.Tokens, r.CostUSD)
 	}
-	b.WriteString(End + "\n")
-	return b.String()
+	return wrap(b.String())
+}
+
+// wrap closes the comment body between the Begin/End markers. Free text that
+// ends up in the body — an LLM-generated Reason, or a category title/check
+// ID/target name pulled from a PR-controlled .tfreview.yaml or workspace
+// name — might happen to contain a marker-like string such as
+// "<!-- tfreview:end -->". Escaping the whole body once here, rather than at
+// each call site that writes a field into it, means no future field can
+// reopen the marker-corruption bug by skipping escaping.
+func wrap(body string) string {
+	return Begin + "\n" + escapeHTMLComments(body) + End + "\n"
 }
 
 func topCategory(r *Result) string {
@@ -146,14 +154,14 @@ func cell(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "|", `\|`)
-	return escapeHTMLComments(s)
+	return s
 }
 
-// An LLM-generated reason is free text and might happen to contain the same
-// string as a Begin/End marker like "<!-- tfreview:end -->". Left as-is, the next
-// UpsertComment/StripBlock call could mistake that part of the comment body for
-// the real marker and shift the block boundary. Neutralize the start/end tokens
-// so they aren't parsed as HTML comment syntax.
+// Neutralizes HTML comment syntax so a marker-like string ("<!-- tfreview:end -->")
+// buried in the body — e.g. via an LLM-generated Reason, or a category title/check
+// ID/target name — can't be mistaken by StripBlock/UpsertComment for the real
+// Begin/End marker and shift the block boundary. Called once over the whole body
+// (see wrap), not per field, so a new field can't reopen this by skipping it.
 func escapeHTMLComments(s string) string {
 	s = strings.ReplaceAll(s, "<!--", "&lt;!--")
 	s = strings.ReplaceAll(s, "-->", "--&gt;")
