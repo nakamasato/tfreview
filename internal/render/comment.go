@@ -149,11 +149,11 @@ func cell(s string) string {
 	return escapeHTMLComments(s)
 }
 
-// LLM が生成する reason は自由記述であり、"<!-- tfreview:end -->" のような Begin/End
-// マーカーと同じ文字列がたまたま含まれる可能性がある。そのまま出力すると次回の
-// UpsertComment / StripBlock がコメント本文中のこの部分をマーカーと誤認識し、
-// コメント全体の境界がずれてしまう。HTML コメント構文として解釈されないよう
-// 開始・終了トークンを無害化する。
+// An LLM-generated reason is free text and might happen to contain the same
+// string as a Begin/End marker like "<!-- tfreview:end -->". Left as-is, the next
+// UpsertComment/StripBlock call could mistake that part of the comment body for
+// the real marker and shift the block boundary. Neutralize the start/end tokens
+// so they aren't parsed as HTML comment syntax.
 func escapeHTMLComments(s string) string {
 	s = strings.ReplaceAll(s, "<!--", "&lt;!--")
 	s = strings.ReplaceAll(s, "-->", "--&gt;")
