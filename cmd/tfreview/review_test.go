@@ -104,7 +104,7 @@ func TestReviewFailOn(t *testing.T) {
 	err := run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o1"), "--fail-on", "critical")
 	require.Equal(t, 1, exitCode(err))
 
-	// machine-only: ask が LLM で hit と答えているので machine score は none → 落ちない
+	// machine-only: the LLM answers "hit", so the machine score stays none and doesn't fail
 	err = run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-machine-only")
 	require.NoError(t, err)
 
@@ -121,7 +121,8 @@ func TestReviewReusesState(t *testing.T) {
 	o1 := filepath.Join(dir, "o1")
 	require.NoError(t, run(t, "review", "--plan", p, "--config", cfg, "--out-dir", o1))
 
-	// 2 回目は state を渡す。mock の答えを変えても再利用されるので結果は同じ
+	// The second run passes in state. Even with different mock answers the
+	// cached verdict is reused, so the result stays the same.
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{"prd":[{"check_id":"delete-or-replace","verdict":"hit","reason":"changed"},{"check_id":"llm-only","verdict":"hit","reason":"changed"}]}`)
 	o2 := filepath.Join(dir, "o2")
 	require.NoError(t, run(t, "review", "--plan", p, "--config", cfg, "--out-dir", o2, "--state-in", filepath.Join(o1, "state.json")))
@@ -169,6 +170,29 @@ func TestReviewIncompleteSummarizesSkippedChecks(t *testing.T) {
 	require.Contains(t, stderr, "skipped:")
 	require.Contains(t, stderr, "llm-only")
 	require.Contains(t, stderr, "no answer returned")
+}
+
+func TestReviewWarnsOnUnmatchedMatchTargets(t *testing.T) {
+	dir := t.TempDir()
+	p := extractFixture(t, dir, "dev")
+	cfg := writeCfg(t, dir, `
+llm: {provider: mock}
+categories:
+  - id: destruction
+    title: D
+    checks:
+      - {id: prod-only, level: critical, match: {targets: [prod]}, verdict_on_match: ask, question: q}
+`)
+	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
+	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{}`)
+	outDir := filepath.Join(dir, "out")
+
+	_, stderr, err := runCapture(t, "review", "--plan", p, "--config", cfg, "--out-dir", outDir)
+	require.NoError(t, err)
+	require.Contains(t, stderr, `match.targets "prod"`)
+	require.Contains(t, stderr, "prod-only")
+	require.Contains(t, stderr, "loaded targets: dev")
+	require.Contains(t, stderr, "check for a typo")
 }
 
 func TestReviewWarnsWhenAnthropicKeyMissing(t *testing.T) {

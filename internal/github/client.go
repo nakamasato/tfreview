@@ -1,4 +1,4 @@
-// Package github は PR コメント・ラベル・artifact のための最小の REST クライアント。
+// Package github is a minimal REST client for PR comments, labels, and artifacts.
 package github
 
 import (

@@ -209,6 +209,15 @@ LLM failure doesn't get pinned for the life of the PR — the next run retries i
 - The config comes from the PR branch. This is a review aid, not a defense
   against a malicious insider.
 - LLM verdicts (🤖) can be wrong. Deterministic verdicts (🔧) cannot.
+- `extract` only removes attributes that Terraform itself marked
+  `sensitive` in the plan, and only at the top level: if just part of a
+  nested attribute is sensitive, the whole attribute is dropped rather than
+  partially masked. Anything Terraform did not mark `sensitive` — user data
+  scripts, policy documents, environment variables, and the like — passes
+  through to plan data unchanged and is sent to the configured LLM provider
+  even if it happens to contain secrets. Mark such attributes `sensitive =
+  true` in the provider/module, or exclude the resource from tfreview
+  (e.g. via `match.targets`), if this is a concern.
 
 ## License
 

@@ -46,7 +46,8 @@ func newCommentCmd() *cobra.Command {
 				return nil
 			}
 			if err := client.SetLabel(cmd.Context(), pr, result.Label); err != nil {
-				// ラベルは補助なので、権限が無いだけならコメントを出せた時点で成功にする。
+				// The label is just a convenience; if we lack permission for it but
+				// already posted the comment, treat the run as successful.
 				if errors.Is(err, github.ErrLabelForbidden) {
 					cmd.PrintErrln("warning: could not create label (needs issues: write):", err)
 					return nil

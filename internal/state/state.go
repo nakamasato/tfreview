@@ -1,5 +1,5 @@
-// Package state は LLM 判定を plan+config の digest でキャッシュする。
-// 目的はトークン代よりも判定の安定性（同じ plan に対して判定を作り直さない）。
+// Package state caches LLM verdicts keyed by a plan+config digest.
+// The goal is judgment stability more than token cost — never re-judge the same plan.
 package state
 
 import (
@@ -24,8 +24,8 @@ func New(headSHA, configDigest string) *State {
 	return &State{HeadSHA: headSHA, ConfigDigest: configDigest, Targets: map[string]TargetState{}}
 }
 
-// Load は失敗を握りつぶして空を返す。state は最適化であって正しさの根拠ではないので、
-// 壊れていたら全 target を判定し直せばよい。
+// Load swallows any failure and returns an empty state. State is an optimization,
+// not a source of correctness, so if it's corrupt, just re-judge every target.
 func Load(path string) *State {
 	empty := New("", "")
 	if path == "" {
@@ -61,7 +61,7 @@ func (s *State) Reusable(target, planDigest, configDigest string) ([]model.Verdi
 	return ts.Verdicts, true
 }
 
-// 評価できなかった判定を書くと、数十秒の API 障害が PR の寿命のあいだ固定される。
+// Writing an unevaluated verdict would let a brief API outage get baked in for the PR's whole lifetime.
 func (s *State) Put(target, planDigest string, verdicts []model.Verdict) {
 	if hasSkipped(verdicts) {
 		return

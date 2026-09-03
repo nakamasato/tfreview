@@ -19,9 +19,8 @@ func Comment(r *Result) string {
 	s := t(r.Language)
 	var b strings.Builder
 
-	// The heading is worded so the risk reads from plain text alone. Badges
-	// (shields.io) are an external service, so duplicate the heading as text
-	// in case they fail to load and the information would otherwise be lost.
+	// The heading conveys risk level through text alone. The badges (shields.io)
+	// are an external service, so the heading duplicates that info to survive an outage.
 	switch {
 	case r.Incomplete:
 		suffix := ""
@@ -107,8 +106,8 @@ func topCategory(r *Result) string {
 
 func writeBadges(b *strings.Builder, r *Result) {
 	if r.Incomplete {
-		// バッジは見出しを反映する。Incomplete のときの見出しは "incomplete" のみなので
-		// risk-<score> は出さず、単一の risk-incomplete バッジにする。
+		// The badge mirrors the heading. When incomplete, the heading only ever shows
+		// "incomplete", so skip risk-<score> and use a single risk-incomplete badge.
 		fmt.Fprintf(b, "![incomplete](https://img.shields.io/badge/risk-incomplete-%s)", LabelColor("tfreview:unknown"))
 	} else {
 		fmt.Fprintf(b, "![%s](https://img.shields.io/badge/risk-%s-%s)", r.Score, badgeText(string(r.Score)), LabelColor("tfreview:"+string(r.Score)))
@@ -119,7 +118,7 @@ func writeBadges(b *strings.Builder, r *Result) {
 	b.WriteString("\n\n")
 }
 
-// shields.io は `-` と `_` を区切りに使うので二重にする。残りは URL エスケープ。
+// shields.io uses `-` and `_` as separators, so double them up. Everything else gets URL-escaped.
 func badgeText(s string) string {
 	s = strings.ReplaceAll(s, "-", "--")
 	s = strings.ReplaceAll(s, "_", "__")

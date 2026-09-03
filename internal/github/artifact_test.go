@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -103,6 +104,66 @@ func TestDownloadArtifactFollowsRedirectWithoutAuth(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, archive, b)
 	require.Empty(t, blobSawAuth, "Authorization must not be forwarded to the cross-host blob redirect")
+}
+
+// TestListArtifactsPaginates verifies that both the workflow-run listing and
+// the per-run artifact listing follow the "page" parameter until a
+// short page signals the end, matching UpsertComment's pagination style.
+func TestListArtifactsPaginates(t *testing.T) {
+	var c *Client
+	c, _ = server(t, func(w http.ResponseWriter, r *http.Request, _ *[]call) {
+		switch r.URL.Path {
+		case "/repos/o/r/pulls/7":
+			_, _ = w.Write([]byte(`{"head":{"sha":"abc"}}`))
+		case "/repos/o/r/actions/runs":
+			require.Equal(t, "abc", r.URL.Query().Get("head_sha"))
+			require.Equal(t, "50", r.URL.Query().Get("per_page"))
+			switch r.URL.Query().Get("page") {
+			case "1":
+				runs := make([]string, 50)
+				for i := range runs {
+					runs[i] = fmt.Sprintf(`{"id":%d,"created_at":"2026-09-01T00:00:00Z"}`, i+1)
+				}
+				_, _ = w.Write([]byte(`{"workflow_runs":[` + strings.Join(runs, ",") + `]}`))
+			case "2":
+				_, _ = w.Write([]byte(`{"workflow_runs":[{"id":51,"created_at":"2026-09-02T00:00:00Z"}]}`))
+			default:
+				w.WriteHeader(500)
+			}
+		case "/repos/o/r/actions/runs/1/artifacts":
+			require.Equal(t, "100", r.URL.Query().Get("per_page"))
+			switch r.URL.Query().Get("page") {
+			case "1":
+				artifacts := make([]string, 100)
+				for i := range artifacts {
+					artifacts[i] = fmt.Sprintf(`{"id":%d,"name":"a%d","archive_download_url":"%s/dl/%d","created_at":"2026-09-01T00:00:00Z"}`, i+1, i+1, c.BaseURL, i+1)
+				}
+				_, _ = w.Write([]byte(`{"artifacts":[` + strings.Join(artifacts, ",") + `]}`))
+			case "2":
+				_, _ = w.Write([]byte(`{"artifacts":[{"id":101,"name":"a101","archive_download_url":"` + c.BaseURL + `/dl/101","created_at":"2026-09-01T00:00:00Z"}]}`))
+			default:
+				w.WriteHeader(500)
+			}
+		case "/repos/o/r/actions/runs/51/artifacts":
+			require.Equal(t, "1", r.URL.Query().Get("page"))
+			_, _ = w.Write([]byte(`{"artifacts":[{"id":200,"name":"tfreview-plan","archive_download_url":"` + c.BaseURL + `/dl/200","created_at":"2026-09-02T01:00:00Z"}]}`))
+		default:
+			// Runs 2 through 50 (padding used only to make the runs listing
+			// itself span two pages) carry no artifacts.
+			if strings.HasPrefix(r.URL.Path, "/repos/o/r/actions/runs/") && strings.HasSuffix(r.URL.Path, "/artifacts") {
+				_, _ = w.Write([]byte(`{"artifacts":[]}`))
+				return
+			}
+			w.WriteHeader(500)
+		}
+	})
+	artifacts, headSHA, err := c.ListArtifacts(context.Background(), 7)
+	require.NoError(t, err)
+	require.Equal(t, "abc", headSHA)
+	// 100 artifacts from run 1 (spanning two pages) + 1 from run 1's second
+	// page + 1 from run 51 (fetched only because runs page 2 was followed).
+	require.Len(t, artifacts, 102)
+	require.Equal(t, "tfreview-plan", artifacts[0].Name)
 }
 
 func TestListArtifactsEmpty(t *testing.T) {

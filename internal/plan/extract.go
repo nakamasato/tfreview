@@ -19,6 +19,7 @@ type showJSON struct {
 			Before         map[string]any  `json:"before"`
 			After          map[string]any  `json:"after"`
 			AfterSensitive json.RawMessage `json:"after_sensitive"`
+			AfterUnknown   json.RawMessage `json:"after_unknown"`
 			Importing      json.RawMessage `json:"importing"`
 		} `json:"change"`
 	} `json:"resource_changes"`
@@ -63,6 +64,7 @@ func Extract(raw []byte, target string) (*Plan, error) {
 		}
 		if kind == "change" || kind == "replace" {
 			r.ChangedKeys = changedKeys(rc.Change.Before, rc.Change.After)
+			r.UnknownKeys = unknownKeys(rc.Change.AfterUnknown)
 		}
 		p.Resources = append(p.Resources, r)
 	}
@@ -83,8 +85,8 @@ func classify(actions []string) string {
 	return ""
 }
 
-// after_sensitive は after と同じ形で、sensitive な位置に true が立つ。
-// トップレベルの属性だけ見る（ネストした sensitive は属性ごと落とす）。
+// after_sensitive mirrors the shape of after, with true set at sensitive positions.
+// Only top-level attributes are considered (a nested sensitive flag drops the whole attribute).
 func stripSensitive(after map[string]any, sensitive json.RawMessage) map[string]any {
 	if after == nil {
 		return nil
@@ -117,6 +119,26 @@ func isSensitive(flag any) bool {
 		return len(f) > 0
 	}
 	return false
+}
+
+// after_unknown は after と同じ形で、apply するまで値が確定しない位置に true が立つ。
+// after_sensitive と同様、トップレベルの属性だけ見る。
+func unknownKeys(unknown json.RawMessage) []string {
+	if s := string(unknown); s == "" || s == "false" || s == "null" {
+		return nil
+	}
+	var flags map[string]any
+	if err := json.Unmarshal(unknown, &flags); err != nil {
+		return nil
+	}
+	var out []string
+	for k, f := range flags {
+		if isSensitive(f) {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func changedKeys(before, after map[string]any) []string {

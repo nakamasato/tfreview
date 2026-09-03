@@ -28,7 +28,7 @@ func newProvider(cfg *config.Config) (llm.Provider, error) {
 	return nil, fmt.Errorf("unsupported provider %q", cfg.LLM.Provider)
 }
 
-// mock は CLI の E2E テスト用。答えは TFREVIEW_MOCK_ANSWERS の JSON から読む。
+// mock is for CLI end-to-end tests. Answers are read from the TFREVIEW_MOCK_ANSWERS JSON.
 func mockFromEnv() (llm.Provider, error) {
 	p := &mock.Provider{Answers: map[string][]llm.Answer{}}
 	raw := os.Getenv("TFREVIEW_MOCK_ANSWERS")

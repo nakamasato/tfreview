@@ -93,6 +93,15 @@ func TestExtractDropsAfterOnUnparsableSensitive(t *testing.T) {
 	require.Nil(t, byAddress(p, "x").After)
 }
 
+func TestExtractPopulatesUnknownKeys(t *testing.T) {
+	raw := `{"resource_changes":[{"address":"acme_widget.this","type":"acme_widget","name":"this","change":{"actions":["update"],"before":{"name":"old","encryption_config":null},"after":{"name":"new","encryption_config":null},"after_sensitive":{},"after_unknown":{"encryption_config":true}}}]}`
+	p, err := Extract([]byte(raw), "x")
+	require.NoError(t, err)
+	r := byAddress(p, "acme_widget.this")
+	require.Equal(t, []string{"encryption_config"}, r.UnknownKeys)
+	require.Nil(t, r.After["encryption_config"])
+}
+
 func TestExtractRejectsInvalidJSON(t *testing.T) {
 	_, err := Extract([]byte("{"), "x")
 	require.Error(t, err)

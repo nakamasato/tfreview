@@ -1,4 +1,4 @@
-// Package judge は match → LLM → merge → fallback → 集約の順で判定をまとめる。
+// Package judge assembles verdicts through the pipeline: match -> LLM -> merge -> fallback -> aggregate.
 package judge
 
 import (
@@ -56,8 +56,8 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 		return out, nil
 	}
 	if !anyChanges(in.Plans) {
-		// 観点はすべて「何が変わったか」を問うので、差分ゼロでは機械判定も LLM 判定も
-		// 原理的に成立しない。呼ばずに済ませる。
+		// Every check asks "what changed", so with zero diff neither machine nor LLM
+		// judgement can produce anything meaningful — skip calling them at all.
 		out.NoChanges = true
 		return out, nil
 	}
@@ -70,8 +70,8 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 		if !ok {
 			continue
 		}
-		// ask は match を候補の絞り込みにだけ使う。候補があるときだけ LLM に回し、
-		// 答えが得られなければ match の結果に戻す。
+		// For ask checks, match only narrows candidates. We only send it to the LLM
+		// when there's a candidate, and fall back to the match result if no answer comes back.
 		if ck.OnMatch == model.OnMatchAsk && v.Kind != model.VerdictMiss {
 			askFallback[ck.ID] = v
 			continue
@@ -105,12 +105,14 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 		}
 	}
 
-	// 不完全さは merge 前に確定させる。merge 後は skipped が負けて痕跡が消える。
+	// Record incompleteness before merging: after merge, a skipped verdict loses to
+	// whatever it's merged with and leaves no trace.
 	for id, vs := range candidates {
 		if machine[id] {
-			// state から再利用した target の候補には、以前は LLM 判定だったが
-			// 今回は match だけで決着した check の古い verdict が混ざりうる。
-			// match が今回下した決定的判定を、そのような古い候補で上書きしない。
+			// A target reused from state may still carry a stale verdict for a check
+			// that used to require an LLM judgement but this time was settled by
+			// match alone. Don't let that stale candidate override match's decisive
+			// verdict from this run.
 			continue
 		}
 		for _, v := range vs {
@@ -156,8 +158,9 @@ func judgeTarget(ctx context.Context, provider llm.Provider, req llm.Request) ([
 	return out, usage
 }
 
-// 1 target でも答えが欠けたら戻す。merge は max なので、答えが返った側の miss が
-// 欠けた側を押し切る。戻したものは決定的な判定なので unevaluated から外す。
+// Fall back if even one target is missing an answer: since merge takes the max,
+// a miss from a target that did answer would otherwise override the missing one.
+// The fallback is a decisive verdict, so remove it from unevaluated.
 func applyAskFallback(fallback map[string]model.Verdict, verdicts map[string]model.Verdict, unevaluated map[string]bool) {
 	for id, fb := range fallback {
 		v, ok := verdicts[id]
