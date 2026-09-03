@@ -157,12 +157,18 @@ func TestRunPlanTooLargeIsUnverifiable(t *testing.T) {
 	require.Empty(t, out.Unevaluated)
 }
 
-func TestRunResponseTruncatedIsUnverifiable(t *testing.T) {
+// Truncation is Skipped, not Unverifiable: unlike ErrPlanTooLarge, whether a
+// response gets truncated isn't deterministic, so state.Put must not cache it
+// (a retry might succeed), and out.Unevaluated must flag it for the reviewer.
+func TestRunResponseTruncatedIsSkipped(t *testing.T) {
 	p := &mock.Provider{Err: anthropic.ErrResponseTruncated}
-	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: []*plan.Plan{dev()}, Provider: p, Prev: state.New("", "")})
+	s := state.New("", "")
+	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: []*plan.Plan{dev()}, Provider: p, Prev: s})
 	require.NoError(t, err)
-	require.Equal(t, model.VerdictUnverifiable, out.Verdicts["sg-open"].Kind)
-	require.Empty(t, out.Unevaluated)
+	require.Equal(t, model.VerdictSkipped, out.Verdicts["sg-open"].Kind)
+	require.True(t, out.Unevaluated["sg-open"])
+	_, cached := out.State.Reusable("dev", dev().Digest(), runCfgParsed(t).Digest)
+	require.False(t, cached, "a truncated verdict must not be cached")
 }
 
 func TestRunMissingAnswerIsSkipped(t *testing.T) {

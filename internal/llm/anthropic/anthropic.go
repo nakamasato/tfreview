@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -22,6 +23,11 @@ var ErrPlanTooLarge = errors.New("plan exceeds max_plan_chars")
 var ErrResponseTruncated = errors.New("response truncated by max_tokens")
 
 const defaultMaxTokens = 128000
+
+// streamTimeout bounds a single Judge call. Messages.New derives a timeout from
+// max_tokens automatically, but Messages.NewStreaming does not, so a stalled
+// connection would otherwise hang the caller (and CI) forever.
+const streamTimeout = 15 * time.Minute
 
 type Options struct {
 	Model        string
@@ -80,9 +86,10 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 	}
 
 	maxTokens := p.opts.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = defaultMaxTokens
-	}
+
+	ctx, cancel := context.WithTimeout(ctx, streamTimeout)
+	defer cancel()
+
 	// max_tokens is large enough here that a non-streaming call risks hitting the
 	// SDK's HTTP timeout, so stream the response and reassemble the final message.
 	stream := p.client.Messages.NewStreaming(ctx, sdk.MessageNewParams{
@@ -96,32 +103,38 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 		Tools:      []sdk.ToolUnionParam{{OfTool: &tool}},
 		ToolChoice: sdk.ToolChoiceParamOfTool(toolName),
 	})
+	defer func() { _ = stream.Close() }()
+
 	resp := &sdk.Message{}
+	usage := func() llm.Usage {
+		return llm.Usage{
+			Calls:            1,
+			InputTokens:      resp.Usage.InputTokens,
+			CacheWriteTokens: resp.Usage.CacheCreationInputTokens,
+			CacheReadTokens:  resp.Usage.CacheReadInputTokens,
+			OutputTokens:     resp.Usage.OutputTokens,
+		}
+	}
 	for stream.Next() {
 		if err := resp.Accumulate(stream.Current()); err != nil {
-			return nil, llm.Usage{}, fmt.Errorf("messages.new (stream): %w", err)
+			// Usage accrues incrementally as the stream progresses (starting at
+			// message_start), so report what was billed even on a mid-stream failure.
+			return nil, usage(), fmt.Errorf("messages.new (stream): %w", err)
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return nil, llm.Usage{}, fmt.Errorf("messages.new (stream): %w", err)
-	}
-	usage := llm.Usage{
-		Calls:            1,
-		InputTokens:      resp.Usage.InputTokens,
-		CacheWriteTokens: resp.Usage.CacheCreationInputTokens,
-		CacheReadTokens:  resp.Usage.CacheReadInputTokens,
-		OutputTokens:     resp.Usage.OutputTokens,
+		return nil, usage(), fmt.Errorf("messages.new (stream): %w", err)
 	}
 	if err := checkTruncated(resp, maxTokens, len(req.Checks)); err != nil {
-		return nil, usage, err
+		return nil, usage(), err
 	}
 	for _, block := range resp.Content {
 		if tu, ok := block.AsAny().(sdk.ToolUseBlock); ok {
 			answers, err := ParseAnswers(tu.Input)
-			return answers, usage, err
+			return answers, usage(), err
 		}
 	}
-	return nil, usage, errors.New("response has no tool_use block")
+	return nil, usage(), errors.New("response has no tool_use block")
 }
 
 // checkTruncated detects that the response was cut off by max_tokens before the
