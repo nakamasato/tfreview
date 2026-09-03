@@ -16,9 +16,17 @@ import (
 
 var ErrPlanTooLarge = errors.New("plan exceeds max_plan_chars")
 
+// ErrResponseTruncated は Messages API の応答が max_tokens で打ち切られたことを示す。
+// tool_use の Input が不完全な JSON になり ParseAnswers が失敗するため、その一般的な
+// パースエラーより先に検知して原因を判定側に伝える。
+var ErrResponseTruncated = errors.New("response truncated by max_tokens")
+
+const defaultMaxTokens = 16000
+
 type Options struct {
 	Model        string
 	MaxPlanChars int
+	MaxTokens    int
 	APIKey       string
 }
 
@@ -28,6 +36,9 @@ type Provider struct {
 }
 
 func New(opts Options) *Provider {
+	if opts.MaxTokens == 0 {
+		opts.MaxTokens = defaultMaxTokens
+	}
 	var ro []option.RequestOption
 	if opts.APIKey != "" {
 		ro = append(ro, option.WithAPIKey(opts.APIKey))
@@ -68,9 +79,13 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 		},
 	}
 
+	maxTokens := p.opts.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = defaultMaxTokens
+	}
 	resp, err := p.client.Messages.New(ctx, sdk.MessageNewParams{
 		Model:     sdk.Model(p.opts.Model),
-		MaxTokens: 16000,
+		MaxTokens: int64(maxTokens),
 		System: []sdk.TextBlockParam{{
 			Text:         BuildSystem(req.Language),
 			CacheControl: sdk.NewCacheControlEphemeralParam(),
@@ -89,6 +104,9 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 		CacheReadTokens:  resp.Usage.CacheReadInputTokens,
 		OutputTokens:     resp.Usage.OutputTokens,
 	}
+	if err := checkTruncated(resp, maxTokens, len(req.Checks)); err != nil {
+		return nil, usage, err
+	}
 	for _, block := range resp.Content {
 		if tu, ok := block.AsAny().(sdk.ToolUseBlock); ok {
 			answers, err := ParseAnswers(tu.Input)
@@ -96,4 +114,14 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 		}
 	}
 	return nil, usage, errors.New("response has no tool_use block")
+}
+
+// checkTruncated は、tool_use の Input を不完全な JSON としてパース失敗させる前に
+// 「max_tokens で打ち切られた」ことを検知する。ParseAnswers のエラーだけでは容量
+// オーバーが原因だと判別できず、レビュアーに伝わらない。
+func checkTruncated(resp *sdk.Message, maxTokens int, numChecks int) error {
+	if resp.StopReason == sdk.StopReasonMaxTokens {
+		return fmt.Errorf("%w: max_tokens=%d, checks=%d", ErrResponseTruncated, maxTokens, numChecks)
+	}
+	return nil
 }

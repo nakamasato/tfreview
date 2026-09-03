@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/nakamasato/tfreview/internal/llm"
 	"github.com/nakamasato/tfreview/internal/model"
 	"github.com/nakamasato/tfreview/internal/plan"
@@ -16,6 +17,24 @@ func TestJudgeRejectsLargePlan(t *testing.T) {
 	big := &plan.Plan{Target: "t", Resources: []plan.Resource{{Address: "aws_s3_bucket.a_long_name"}}}
 	_, _, err := p.Judge(context.Background(), llm.Request{Plan: big, Checks: []model.Check{{ID: "a", Question: "q"}}})
 	require.ErrorIs(t, err, ErrPlanTooLarge)
+}
+
+func TestCheckTruncatedDetectsMaxTokens(t *testing.T) {
+	resp := &sdk.Message{StopReason: sdk.StopReasonMaxTokens}
+	err := checkTruncated(resp, 16000, 5)
+	require.ErrorIs(t, err, ErrResponseTruncated)
+	require.Contains(t, err.Error(), "max_tokens=16000")
+	require.Contains(t, err.Error(), "checks=5")
+}
+
+func TestCheckTruncatedIgnoresOtherStopReasons(t *testing.T) {
+	resp := &sdk.Message{StopReason: sdk.StopReasonToolUse}
+	require.NoError(t, checkTruncated(resp, 16000, 5))
+}
+
+func TestNewDefaultsMaxTokens(t *testing.T) {
+	p := New(Options{Model: "claude-opus-5"})
+	require.Equal(t, defaultMaxTokens, p.opts.MaxTokens)
 }
 
 func TestJudgeLive(t *testing.T) {

@@ -157,6 +157,14 @@ func TestRunPlanTooLargeIsUnverifiable(t *testing.T) {
 	require.Empty(t, out.Unevaluated)
 }
 
+func TestRunResponseTruncatedIsUnverifiable(t *testing.T) {
+	p := &mock.Provider{Err: anthropic.ErrResponseTruncated}
+	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: []*plan.Plan{dev()}, Provider: p, Prev: state.New("", "")})
+	require.NoError(t, err)
+	require.Equal(t, model.VerdictUnverifiable, out.Verdicts["sg-open"].Kind)
+	require.Empty(t, out.Unevaluated)
+}
+
 func TestRunMissingAnswerIsSkipped(t *testing.T) {
 	p := &mock.Provider{Answers: map[string][]llm.Answer{"dev": {}}}
 	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: []*plan.Plan{dev()}, Provider: p, Prev: state.New("", "")})

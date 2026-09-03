@@ -15,7 +15,7 @@ import (
 func newProvider(cfg *config.Config) (llm.Provider, error) {
 	switch cfg.LLM.Provider {
 	case "anthropic":
-		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
+		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, MaxTokens: cfg.LLM.MaxTokens, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
 	case "mock":
 		// mock returns fixed verdicts without calling any LLM; gating it behind an
 		// explicit opt-in keeps a config typo (or a copied test config) from

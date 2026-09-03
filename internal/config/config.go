@@ -25,6 +25,7 @@ type LLM struct {
 	Provider     string             `yaml:"provider"`
 	Model        string             `yaml:"model"`
 	MaxPlanChars int                `yaml:"max_plan_chars"`
+	MaxTokens    int                `yaml:"max_tokens"`
 	Pricing      map[string]float64 `yaml:"pricing"`
 }
 
@@ -94,6 +95,9 @@ func Parse(raw []byte) (*Config, error) {
 	}
 	if c.LLM.MaxPlanChars == 0 {
 		c.LLM.MaxPlanChars = 100000
+	}
+	if c.LLM.MaxTokens == 0 {
+		c.LLM.MaxTokens = 16000
 	}
 
 	if len(*rc.Categories) == 0 {
