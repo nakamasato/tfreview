@@ -171,6 +171,29 @@ func TestReviewIncompleteSummarizesSkippedChecks(t *testing.T) {
 	require.Contains(t, stderr, "no answer returned")
 }
 
+func TestReviewWarnsOnUnmatchedMatchTargets(t *testing.T) {
+	dir := t.TempDir()
+	p := extractFixture(t, dir, "dev")
+	cfg := writeCfg(t, dir, `
+llm: {provider: mock}
+categories:
+  - id: destruction
+    title: D
+    checks:
+      - {id: prod-only, level: critical, match: {targets: [prod]}, verdict_on_match: ask, question: q}
+`)
+	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
+	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{}`)
+	outDir := filepath.Join(dir, "out")
+
+	_, stderr, err := runCapture(t, "review", "--plan", p, "--config", cfg, "--out-dir", outDir)
+	require.NoError(t, err)
+	require.Contains(t, stderr, `match.targets "prod"`)
+	require.Contains(t, stderr, "prod-only")
+	require.Contains(t, stderr, "loaded targets: dev")
+	require.Contains(t, stderr, "check for a typo")
+}
+
 func TestReviewWarnsWhenAnthropicKeyMissing(t *testing.T) {
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
