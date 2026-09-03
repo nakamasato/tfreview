@@ -1,0 +1,115 @@
+# Full example for AWS. Copy to .tfreview.yaml and edit.
+#
+# level            none < medium < high < critical. A category scores the max of its
+#                  checks; the PR scores the max of its categories.
+# match            deterministic condition. Only actions / types / targets, each a list
+#                  of strings.
+# verdict_on_match hit (default): match alone decides. ask: match only narrows the
+#                  candidates, the LLM decides; if no answer comes back, the match
+#                  result stands. unverifiable: the plan cannot show this; report
+#                  "unverifiable by plan" instead of "no".
+# question         passed to the LLM verbatim. Ask only what the plan can show. To ask
+#                  whether something was added or relaxed, make it use `changed_keys`
+#                  (attributes whose value changed in this plan).
+language: en
+llm:
+  provider: anthropic
+  model: claude-opus-5
+
+categories:
+  - id: destruction
+    title: Destruction / downtime
+    checks:
+      - id: delete-or-replace
+        level: critical
+        match: { actions: [delete] }
+        verdict_on_match: ask
+        question: |
+          Is a running resource deleted or replaced (forces replacement)? If so, name
+          it and say what becomes unavailable. Removing an IAM binding from a human
+          user does not count; removing one from a CI role or workload does. An
+          authoritative policy resource (aws_iam_policy body) being replaced counts.
+
+      # Targets whose outputs other targets read via terraform_remote_state, and whose
+      # downstream plans do not run in the same workflow. unverifiable: the plan
+      # cannot show whether an output change or resource replacement here breaks a
+      # downstream target's terraform_remote_state read, since the downstream plan
+      # did not run.
+      - id: shared-target
+        level: critical
+        match: { targets: [network-prd, shared] }
+        verdict_on_match: unverifiable
+
+      - id: ecs-downtime
+        level: high
+        question: |
+          Could an ECS service, ALB, or target group replacement drop requests?
+          Judge only from what the plan shows (replaced resources, desired_count,
+          deployment settings, target group re-attachment). Do not estimate how long;
+          if you cannot tell, answer unverifiable and say what is missing.
+
+  - id: data-loss
+    title: Data loss
+    checks:
+      - id: stateful-delete
+        level: critical
+        match:
+          actions: [delete]
+          types: [aws_db_instance, aws_rds_cluster, aws_dynamodb_table, aws_s3_bucket, aws_efs_file_system, aws_elasticache_cluster]
+        verdict_on_match: ask
+        question: |
+          Is a resource holding data deleted or replaced? Is there a recovery path
+          (snapshot, versioning, backup)?
+
+      - id: guard-relaxed
+        level: critical
+        question: |
+          Is force_destroy, deletion_protection, skip_final_snapshot, or
+          backup_retention_period changed toward the side that loses data? Decide
+          from `changed_keys` only; a guard that was already relaxed does not count.
+          If there are no `changed_keys` (create/delete), answer unverifiable.
+
+  - id: exposure
+    title: Permissions / exposure
+    checks:
+      - id: iam-wildcard
+        level: high
+        question: |
+          Is a wildcard (*) added to an IAM policy Action or Resource? If so, which
+          role gains what? Decide from `changed_keys`; editing another attribute of a
+          policy that already had a wildcard does not count.
+
+      - id: trust-policy
+        level: high
+        question: |
+          Is a principal added to a role's assume_role_policy? If so, who can now
+          assume it? If assume_role_policy is not in `changed_keys`, it did not change.
+
+      - id: human-write-grant
+        level: high
+        question: |
+          Is a write-capable policy attached to an IAM user (not a role used by CI
+          or workloads)? Answer only whether it happens; do not excuse it because it
+          might be justified. Read-only policies (ReadOnlyAccess) do not count.
+
+      - id: sg-open
+        level: high
+        question: |
+          Is 0.0.0.0/0 or ::/0 added to a security group ingress rule? Which ports
+          open to the internet? Decide from `changed_keys`.
+
+      - id: s3-public
+        level: high
+        question: |
+          Is an S3 public access block relaxed, or a bucket policy changed to allow
+          anonymous access? Decide from `changed_keys`.
+
+  - id: cost
+    title: Cost
+    checks:
+      - id: recurring-charge
+        level: high
+        question: |
+          Do recurring charges increase? Name the resource and attribute
+          (instance_class, instance_type, allocated_storage, desired_count, a new NAT
+          gateway or load balancer). Do not state prices.

@@ -1,0 +1,16 @@
+version: 2
+project_name: tfreview
+builds:
+  - main: ./cmd/tfreview
+    binary: tfreview
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+archives:
+  - formats: [tar.gz]
+    name_template: "tfreview_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+release:
+  draft: false
