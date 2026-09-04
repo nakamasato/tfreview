@@ -12,5 +12,10 @@ archives:
     name_template: "tfreview_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: checksums.txt
+# release-please owns the release and its notes, so goreleaser only attaches
+# artifacts to what already exists.
 release:
-  draft: false
+  mode: append
+
+changelog:
+  disable: true
