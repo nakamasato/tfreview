@@ -14,7 +14,7 @@ type issueComment struct {
 	Body string `json:"body"`
 }
 
-// マーカーで自分のコメントを見つけて差し替える。push のたびに積み上げない。
+// Find our own comment by its marker and replace it, so pushes don't pile up new comments.
 func (c *Client) UpsertComment(ctx context.Context, pr int, body string) error {
 	for page := 1; ; page++ {
 		var comments []issueComment

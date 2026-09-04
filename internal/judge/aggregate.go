@@ -5,8 +5,8 @@ import (
 	"github.com/nakamasato/tfreview/internal/model"
 )
 
-// counts は hit と unverifiable を危険度に数える。unverifiable を none に落とすと
-// 「plan では見えない」観点が常に緑になる。
+// counts treats both hit and unverifiable as contributing to severity. If unverifiable
+// were dropped to none, any check that plan alone can't confirm would always show green.
 func counts(k model.VerdictKind) bool {
 	return k == model.VerdictHit || k == model.VerdictUnverifiable
 }
@@ -21,7 +21,8 @@ func CategoryScore(cat model.Category, verdicts map[string]model.Verdict) model.
 	return score
 }
 
-// 合計や平均にすると critical 1 件が該当なし 9 件に薄められるので max。
+// Use max, not sum or average: averaging would dilute a single critical hit
+// among nine passing checks.
 func Score(cfg *config.Config, verdicts map[string]model.Verdict) model.Level {
 	score := model.LevelNone
 	for _, cat := range cfg.Categories {
@@ -30,10 +31,10 @@ func Score(cfg *config.Config, verdicts map[string]model.Verdict) model.Level {
 	return score
 }
 
-func MachineScore(cfg *config.Config, verdicts map[string]model.Verdict) model.Level {
+func RuleScore(cfg *config.Config, verdicts map[string]model.Verdict) model.Level {
 	filtered := map[string]model.Verdict{}
 	for id, v := range verdicts {
-		if v.Source == model.SourceMachine {
+		if v.Source == model.SourceRule {
 			filtered[id] = v
 		}
 	}

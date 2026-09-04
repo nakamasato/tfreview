@@ -15,7 +15,7 @@ import (
 func newProvider(cfg *config.Config) (llm.Provider, error) {
 	switch cfg.LLM.Provider {
 	case "anthropic":
-		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
+		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, MaxTokens: cfg.LLM.MaxTokens, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
 	case "mock":
 		// mock returns fixed verdicts without calling any LLM; gating it behind an
 		// explicit opt-in keeps a config typo (or a copied test config) from
@@ -28,7 +28,7 @@ func newProvider(cfg *config.Config) (llm.Provider, error) {
 	return nil, fmt.Errorf("unsupported provider %q", cfg.LLM.Provider)
 }
 
-// mock は CLI の E2E テスト用。答えは TFREVIEW_MOCK_ANSWERS の JSON から読む。
+// mock is for CLI end-to-end tests. Answers are read from the TFREVIEW_MOCK_ANSWERS JSON.
 func mockFromEnv() (llm.Provider, error) {
 	p := &mock.Provider{Answers: map[string][]llm.Answer{}}
 	raw := os.Getenv("TFREVIEW_MOCK_ANSWERS")

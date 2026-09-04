@@ -1,4 +1,4 @@
-// Package render は judge の出力を result.json と PR コメントに変換する。
+// Package render converts judge output into result.json and a PR comment.
 package render
 
 import (
@@ -37,23 +37,23 @@ type TargetResult struct {
 }
 
 type Result struct {
-	Score        model.Level      `json:"score"`
-	MachineScore model.Level      `json:"machine_score"`
-	Incomplete   bool             `json:"incomplete"`
-	Label        string           `json:"label"`
-	HeadSHA      string           `json:"head_sha"`
-	JudgedAt     string           `json:"judged_at"`
-	Repo         string           `json:"repo"`
-	ConfigPath   string           `json:"config_path"`
-	Language     string           `json:"language"`
-	Model        string           `json:"model"`
-	NoPlans      bool             `json:"no_plans"`
-	NoChanges    bool             `json:"no_changes"`
-	Categories   []CategoryResult `json:"categories"`
-	Targets      []TargetResult   `json:"targets"`
-	Unevaluated  []string         `json:"unevaluated"`
-	Usage        llm.Usage        `json:"usage"`
-	CostUSD      float64          `json:"cost_usd"`
+	Score       model.Level      `json:"score"`
+	RuleScore   model.Level      `json:"rule_score"`
+	Incomplete  bool             `json:"incomplete"`
+	Label       string           `json:"label"`
+	HeadSHA     string           `json:"head_sha"`
+	JudgedAt    string           `json:"judged_at"`
+	Repo        string           `json:"repo"`
+	ConfigPath  string           `json:"config_path"`
+	Language    string           `json:"language"`
+	Model       string           `json:"model"`
+	NoPlans     bool             `json:"no_plans"`
+	NoChanges   bool             `json:"no_changes"`
+	Categories  []CategoryResult `json:"categories"`
+	Targets     []TargetResult   `json:"targets"`
+	Unevaluated []string         `json:"unevaluated"`
+	Usage       llm.Usage        `json:"usage"`
+	CostUSD     float64          `json:"cost_usd"`
 }
 
 type Meta struct {
@@ -96,7 +96,7 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 	}
 
 	r.Score = judge.Score(cfg, out.Verdicts)
-	r.MachineScore = judge.MachineScore(cfg, out.Verdicts)
+	r.RuleScore = judge.RuleScore(cfg, out.Verdicts)
 	r.Incomplete = !out.NoPlans && !out.NoChanges && judge.IsIncomplete(out.Verdicts, out.Unevaluated)
 	if r.Incomplete {
 		r.Label = "tfreview:unknown"

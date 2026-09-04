@@ -144,7 +144,7 @@ runs:
         # shellcheck disable=SC2086
         tfreview review $PLAN_ARGS --config "$CONFIG" --state-in "$state" --out-dir "$out" \
           --head-sha "$HEAD_SHA" --repo "$GITHUB_REPOSITORY" $fail || code=$?
-        # exit 1 (fail-on) でも出力は揃っているので、コメントを出してから落とす
+        # Even on exit 1 (fail-on), the outputs are already in place, so post the comment before failing.
         if [ -f "$out/result.json" ]; then
           echo "score=$(jq -r .score "$out/result.json")" >> "$GITHUB_OUTPUT"
           echo "label=$(jq -r .label "$out/result.json")" >> "$GITHUB_OUTPUT"

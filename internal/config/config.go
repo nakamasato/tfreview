@@ -1,4 +1,4 @@
-// Package config は .tfreview.yaml を読み、判定の観点に変換する。
+// Package config reads .tfreview.yaml and converts it into judgment criteria.
 package config
 
 import (
@@ -25,6 +25,7 @@ type LLM struct {
 	Provider     string             `yaml:"provider"`
 	Model        string             `yaml:"model"`
 	MaxPlanChars int                `yaml:"max_plan_chars"`
+	MaxTokens    int                `yaml:"max_tokens"`
 	Pricing      map[string]float64 `yaml:"pricing"`
 }
 
@@ -75,7 +76,7 @@ func Parse(raw []byte) (*Config, error) {
 			return nil, fmt.Errorf("builtin default.yaml is broken: %w", err)
 		}
 		rc.Categories = def.Categories
-		// 組み込み観点が変わったときも state を無効化したいので digest に混ぜる。
+		// Mix the builtin defaults into the digest so state is invalidated when they change too.
 		digestInput = append(append([]byte{}, raw...), defaultYAML...)
 	}
 
@@ -94,6 +95,9 @@ func Parse(raw []byte) (*Config, error) {
 	}
 	if c.LLM.MaxPlanChars == 0 {
 		c.LLM.MaxPlanChars = 100000
+	}
+	if c.LLM.MaxTokens == 0 {
+		c.LLM.MaxTokens = 128000
 	}
 
 	if len(*rc.Categories) == 0 {

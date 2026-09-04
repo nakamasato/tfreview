@@ -1,4 +1,4 @@
-// Package mock はテスト用の Provider。
+// Package mock is a Provider for use in tests.
 package mock
 
 import (

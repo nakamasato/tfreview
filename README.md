@@ -91,7 +91,7 @@ Without `ANTHROPIC_API_KEY` set, `review` still runs, prints a warning to
 stderr, and labels the result `tfreview:unknown` since no LLM checks could be
 judged.
 
-`--fail-on-machine-only` narrows `--fail-on` to verdicts a `match` decided
+`--fail-on-rule-only` narrows `--fail-on` to verdicts a `match` decided
 (deterministic checks, or an `ask` check that fell back to its match result
 because the LLM didn't answer) — an LLM `hit` alone won't fail the build.
 
@@ -112,6 +112,7 @@ llm:
   provider: anthropic        # anthropic only, for now
   model: claude-opus-5
   max_plan_chars: 100000     # skip the LLM call and mark every check unverifiable above this size
+  max_tokens: 128000         # max_tokens for the judging call; lower it only for a model with a smaller output cap
   pricing:                   # USD / Mtok, used only for the footer's cost estimate; built-in default if omitted
     input: 5.00
     cache_write: 6.25
@@ -209,6 +210,15 @@ LLM failure doesn't get pinned for the life of the PR — the next run retries i
 - The config comes from the PR branch. This is a review aid, not a defense
   against a malicious insider.
 - LLM verdicts (🤖) can be wrong. Deterministic verdicts (🔧) cannot.
+- `extract` only removes attributes that Terraform itself marked
+  `sensitive` in the plan, and only at the top level: if just part of a
+  nested attribute is sensitive, the whole attribute is dropped rather than
+  partially masked. Anything Terraform did not mark `sensitive` — user data
+  scripts, policy documents, environment variables, and the like — passes
+  through to plan data unchanged and is sent to the configured LLM provider
+  even if it happens to contain secrets. Mark such attributes `sensitive =
+  true` in the provider/module, or exclude the resource from tfreview
+  (e.g. via `match.targets`), if this is a concern.
 
 ## License
 

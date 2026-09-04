@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nakamasato/tfreview/internal/config"
@@ -36,7 +37,7 @@ func fixture(t *testing.T, lang string) (*config.Config, *judge.Output, Meta) {
 	out := &judge.Output{
 		Verdicts: map[string]model.Verdict{
 			"delete-or-replace": {CheckID: "delete-or-replace", Kind: model.VerdictHit, Reason: "aws_db_instance.main is deleted | replaced", Source: model.SourceLLM},
-			"shared":            {CheckID: "shared", Kind: model.VerdictMiss, Reason: "no resource matched", Source: model.SourceMachine},
+			"shared":            {CheckID: "shared", Kind: model.VerdictMiss, Reason: "no resource matched", Source: model.SourceRule},
 			"sg-open":           {CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "no security group\nchanged", Source: model.SourceLLM},
 		},
 		Unevaluated: map[string]bool{},
@@ -54,7 +55,7 @@ func TestBuild(t *testing.T) {
 	c, out, meta := fixture(t, "en")
 	r := Build(c, out, meta)
 	require.Equal(t, model.LevelCritical, r.Score)
-	require.Equal(t, model.LevelNone, r.MachineScore)
+	require.Equal(t, model.LevelNone, r.RuleScore)
 	require.False(t, r.Incomplete)
 	require.Equal(t, "tfreview:critical", r.Label)
 	require.Len(t, r.Categories, 2)
@@ -78,6 +79,65 @@ func TestBuildIncomplete(t *testing.T) {
 	require.Contains(t, body, "sg-open")
 	require.Contains(t, body, "img.shields.io/badge/risk-incomplete-0075CA")
 	require.NotContains(t, body, "badge/risk-critical")
+}
+
+func TestCommentIncompleteWithoutUnevaluated(t *testing.T) {
+	r := &Result{
+		Score: model.LevelNone, Incomplete: true, Label: "tfreview:unknown",
+		Language: "en", Unevaluated: []string{}, Targets: []TargetResult{}, Categories: []CategoryResult{},
+		HeadSHA: "abc1234", JudgedAt: "2026-09-02T00:00:00Z",
+	}
+	body := Comment(r)
+	require.Contains(t, body, "## 🔵 Risk: incomplete\n\n")
+	require.NotContains(t, body, "incomplete ()")
+}
+
+func TestCellEscapesMarkerLikeReason(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	out.Verdicts["sg-open"] = model.Verdict{
+		CheckID: "sg-open", Kind: model.VerdictHit, Source: model.SourceLLM,
+		Reason: "quoting plan output that contains " + Begin + " and " + End + " literally",
+	}
+	body := Comment(Build(c, out, meta))
+
+	// Begin/End must still appear exactly once each, at the real header and footer.
+	require.Equal(t, 1, strings.Count(body, Begin))
+	require.Equal(t, 1, strings.Count(body, End))
+	require.True(t, strings.HasPrefix(body, Begin+"\n"))
+	require.True(t, strings.HasSuffix(body, End+"\n"))
+
+	// StripBlock must still remove exactly the intended header-to-footer block.
+	stripped := StripBlock(body)
+	require.NotContains(t, stripped, Begin)
+	require.NotContains(t, stripped, End)
+	require.Empty(t, strings.TrimSpace(stripped))
+}
+
+// The marker string can also reach the comment body through PR-controlled
+// config/plan data, not just an LLM-generated Reason: a .tfreview.yaml category
+// title or check ID, or a plan/artifact-derived target name. Escaping must apply
+// to the whole body (see wrap), not only to Reason.
+func TestCommentEscapesMarkerLikeConfigAndTargetData(t *testing.T) {
+	r := &Result{
+		Score: model.LevelCritical, Label: "tfreview:critical", Language: "en",
+		Unevaluated: []string{End}, HeadSHA: "abc1234", JudgedAt: "2026-09-02T00:00:00Z",
+		Categories: []CategoryResult{{
+			ID: "cat", Title: "cat " + End, Score: model.LevelCritical, Hits: 1, Total: 1,
+			Checks: []CheckResult{{ID: "check " + End, Level: model.LevelCritical, Verdict: model.VerdictHit, Reason: "ok", Source: model.SourceRule}},
+		}},
+		Targets: []TargetResult{{Target: "prd " + End}},
+	}
+	body := Comment(r)
+
+	require.Equal(t, 1, strings.Count(body, Begin))
+	require.Equal(t, 1, strings.Count(body, End))
+	require.True(t, strings.HasPrefix(body, Begin+"\n"))
+	require.True(t, strings.HasSuffix(body, End+"\n"))
+
+	stripped := StripBlock(body)
+	require.NotContains(t, stripped, Begin)
+	require.NotContains(t, stripped, End)
+	require.Empty(t, strings.TrimSpace(stripped))
 }
 
 func TestCommentGolden(t *testing.T) {

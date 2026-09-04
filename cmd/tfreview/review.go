@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,14 +24,14 @@ var now = time.Now
 
 func newReviewCmd() *cobra.Command {
 	var (
-		plans       []string
-		configPath  string
-		stateIn     string
-		outDir      string
-		headSHA     string
-		repo        string
-		failOn      string
-		machineOnly bool
+		plans      []string
+		configPath string
+		stateIn    string
+		outDir     string
+		headSHA    string
+		repo       string
+		failOn     string
+		ruleOnly   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -105,6 +107,9 @@ func newReviewCmd() *cobra.Command {
 					cmd.PrintErrln(line)
 				}
 			}
+			for _, line := range unmatchedTargetWarnings(cfg, ps) {
+				cmd.PrintErrln(line)
+			}
 
 			// --fail-on-machine-only exists to block deterministically regardless of
 			// LLM availability, so when machineOnly is set, ignore result.Incomplete
@@ -112,8 +117,8 @@ func newReviewCmd() *cobra.Command {
 			// The default (machineOnly=false) keeps skipping fail-on on Incomplete.
 			if failOn != "" && (machineOnly || !result.Incomplete) {
 				score := result.Score
-				if machineOnly {
-					score = result.MachineScore
+				if ruleOnly {
+					score = result.RuleScore
 				}
 				if model.LevelAtLeast(score, failLevel) {
 					if machineOnly && result.Incomplete {
@@ -136,12 +141,13 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&headSHA, "head-sha", "", "commit being judged (default: git rev-parse HEAD)")
 	cmd.Flags().StringVar(&repo, "repo", "", "owner/name, used only for links (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit 1 when the score reaches this level (medium|high|critical)")
-	cmd.Flags().BoolVar(&machineOnly, "fail-on-machine-only", false, "with --fail-on, count only deterministic (match) verdicts")
+	cmd.Flags().BoolVar(&ruleOnly, "fail-on-rule-only", false, "with --fail-on, count only deterministic (match) verdicts")
 	return cmd
 }
 
-// config が無ければ組み込みデフォルトで動く。あって壊れていれば exit 2:
-// 観点ゼロで走ると全 PR が緑になるので、落とすのが正しい。
+// If there's no config, fall back to the built-in defaults. If a config exists
+// but is broken, exit 2: running with zero checks would make every PR look
+// green, so failing loudly is the correct behavior.
 func loadConfig(path string) (*config.Config, error) {
 	cfg, err := config.Load(path)
 	if err == nil {
@@ -181,6 +187,55 @@ func skippedSummaryLines(result *render.Result) []string {
 	lines := make([]string, 0, len(order))
 	for _, reason := range order {
 		lines = append(lines, "skipped: "+strings.Join(byReason[reason], ", ")+" — "+reason)
+	}
+	return lines
+}
+
+// unmatchedTargetWarnings flags match.targets entries that name a target none of
+// the loaded plans has. Nothing in cfg alone can tell a typo from a target
+// that simply wasn't part of this run (e.g. reviewing only the targets that
+// changed), so this only compares against the plans actually passed in and
+// never affects the verdict — it is purely a "check for a typo" hint. With no
+// plans loaded at all there is nothing meaningful to compare against, so no
+// warning is produced (see TestReviewNoPlansIsNone).
+func unmatchedTargetWarnings(cfg *config.Config, ps []*plan.Plan) []string {
+	if len(ps) == 0 {
+		return nil
+	}
+	loaded := map[string]bool{}
+	for _, p := range ps {
+		if p.Target != "" {
+			loaded[p.Target] = true
+		}
+	}
+	loadedList := make([]string, 0, len(loaded))
+	for t := range loaded {
+		loadedList = append(loadedList, t)
+	}
+	sort.Strings(loadedList)
+
+	var order []string
+	byTarget := map[string][]string{}
+	for _, cat := range cfg.Categories {
+		for _, ck := range cat.Checks {
+			for _, t := range ck.Match.Targets {
+				if loaded[t] {
+					continue
+				}
+				if _, ok := byTarget[t]; !ok {
+					order = append(order, t)
+				}
+				byTarget[t] = append(byTarget[t], ck.ID)
+			}
+		}
+	}
+	sort.Strings(order)
+
+	lines := make([]string, 0, len(order))
+	for _, t := range order {
+		lines = append(lines, fmt.Sprintf(
+			"warning: match.targets %q (checks: %s) does not match any of the loaded targets: %s — check for a typo",
+			t, strings.Join(byTarget[t], ", "), strings.Join(loadedList, ", ")))
 	}
 	return lines
 }

@@ -9,8 +9,8 @@ import (
 
 var githubRemoteRe = regexp.MustCompile(`^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$`)
 
-// parseGitHubRemote は github.com の origin URL から owner/repo を取り出す。
-// https/scp-like/ssh の各形式に対応し、他ホストや不正な形式は false を返す。
+// parseGitHubRemote extracts owner/repo from a github.com origin URL.
+// It handles the https/scp-like/ssh forms and returns false for other hosts or malformed input.
 func parseGitHubRemote(url string) (string, bool) {
 	url = strings.TrimSpace(url)
 	m := githubRemoteRe.FindStringSubmatch(url)
@@ -20,9 +20,9 @@ func parseGitHubRemote(url string) (string, bool) {
 	return m[1], true
 }
 
-// gitRemoteRepo は `git remote get-url origin` の結果から github.com のリポジトリを推測する。
-// git が無い・リポジトリでない・origin が無い・github.com 以外、いずれも空文字を返す
-// (gh のカレントディレクトリからの推測と同じふるまい)。
+// gitRemoteRepo infers the github.com repository from `git remote get-url origin`.
+// It returns an empty string if git is missing, this isn't a repo, there's no
+// origin, or origin isn't github.com (matching gh's own current-directory inference).
 func gitRemoteRepo() string {
 	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
 	if err != nil {
