@@ -121,8 +121,8 @@ func isSensitive(flag any) bool {
 	return false
 }
 
-// after_unknown は after と同じ形で、apply するまで値が確定しない位置に true が立つ。
-// after_sensitive と同様、トップレベルの属性だけ見る。
+// after_unknown mirrors after's shape, with true set at positions whose value
+// won't be known until apply. Like after_sensitive, only top-level attributes are checked.
 func unknownKeys(unknown json.RawMessage) []string {
 	if s := string(unknown); s == "" || s == "false" || s == "null" {
 		return nil
