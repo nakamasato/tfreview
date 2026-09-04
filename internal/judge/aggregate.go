@@ -31,10 +31,10 @@ func Score(cfg *config.Config, verdicts map[string]model.Verdict) model.Level {
 	return score
 }
 
-func MachineScore(cfg *config.Config, verdicts map[string]model.Verdict) model.Level {
+func RuleScore(cfg *config.Config, verdicts map[string]model.Verdict) model.Level {
 	filtered := map[string]model.Verdict{}
 	for id, v := range verdicts {
-		if v.Source == model.SourceMachine {
+		if v.Source == model.SourceRule {
 			filtered[id] = v
 		}
 	}

@@ -91,7 +91,7 @@ Without `ANTHROPIC_API_KEY` set, `review` still runs, prints a warning to
 stderr, and labels the result `tfreview:unknown` since no LLM checks could be
 judged.
 
-`--fail-on-machine-only` narrows `--fail-on` to verdicts a `match` decided
+`--fail-on-rule-only` narrows `--fail-on` to verdicts a `match` decided
 (deterministic checks, or an `ask` check that fell back to its match result
 because the LLM didn't answer) — an LLM `hit` alone won't fail the build.
 

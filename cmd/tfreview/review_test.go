@@ -104,8 +104,8 @@ func TestReviewFailOn(t *testing.T) {
 	err := run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o1"), "--fail-on", "critical")
 	require.Equal(t, 1, exitCode(err))
 
-	// machine-only: the LLM answers "hit", so the machine score stays none and doesn't fail
-	err = run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-machine-only")
+	// rule-only: the LLM answers "hit", so the rule score stays none and doesn't fail
+	err = run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-rule-only")
 	require.NoError(t, err)
 
 	err = run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o3"), "--fail-on", "bogus")

@@ -59,7 +59,7 @@ func Comment(r *Result) string {
 	for _, c := range r.Categories {
 		for _, ck := range c.Checks {
 			icon := "🤖"
-			if ck.Source == model.SourceMachine {
+			if ck.Source == model.SourceRule {
 				icon = "🔧"
 			}
 			fmt.Fprintf(&b, "| %s | %s | %s %s | %s |\n", ck.ID, ck.Level, icon, ck.Verdict, cell(ck.Reason))

@@ -16,7 +16,7 @@ func Evaluate(check model.Check, plans []*plan.Plan) (model.Verdict, bool) {
 	if check.Match.IsZero() {
 		return model.Verdict{}, false
 	}
-	v := model.Verdict{CheckID: check.ID, Source: model.SourceMachine, Kind: model.VerdictMiss, Reason: "no resource matched"}
+	v := model.Verdict{CheckID: check.ID, Source: model.SourceRule, Kind: model.VerdictMiss, Reason: "no resource matched"}
 	targetsOnly := len(check.Match.Actions) == 0 && len(check.Match.Types) == 0
 
 	var matched []string

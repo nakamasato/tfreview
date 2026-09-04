@@ -31,15 +31,15 @@ func TestScoreIsMax(t *testing.T) {
 	vs := map[string]model.Verdict{
 		"crit": {Kind: model.VerdictMiss, Source: model.SourceLLM},
 		"med":  {Kind: model.VerdictHit, Source: model.SourceLLM},
-		"high": {Kind: model.VerdictUnverifiable, Source: model.SourceMachine},
+		"high": {Kind: model.VerdictUnverifiable, Source: model.SourceRule},
 	}
 	require.Equal(t, model.LevelHigh, Score(c, vs))
 	require.Equal(t, model.LevelMedium, CategoryScore(c.Categories[0], vs))
-	require.Equal(t, model.LevelHigh, MachineScore(c, vs))
+	require.Equal(t, model.LevelHigh, RuleScore(c, vs))
 
 	vs["crit"] = model.Verdict{Kind: model.VerdictHit, Source: model.SourceLLM}
 	require.Equal(t, model.LevelCritical, Score(c, vs))
-	require.Equal(t, model.LevelHigh, MachineScore(c, vs))
+	require.Equal(t, model.LevelHigh, RuleScore(c, vs))
 }
 
 func TestScoreNoneWhenNothingHits(t *testing.T) {

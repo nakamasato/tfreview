@@ -24,14 +24,14 @@ var now = time.Now
 
 func newReviewCmd() *cobra.Command {
 	var (
-		plans       []string
-		configPath  string
-		stateIn     string
-		outDir      string
-		headSHA     string
-		repo        string
-		failOn      string
-		machineOnly bool
+		plans      []string
+		configPath string
+		stateIn    string
+		outDir     string
+		headSHA    string
+		repo       string
+		failOn     string
+		ruleOnly   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -113,8 +113,8 @@ func newReviewCmd() *cobra.Command {
 
 			if failOn != "" && !result.Incomplete {
 				score := result.Score
-				if machineOnly {
-					score = result.MachineScore
+				if ruleOnly {
+					score = result.RuleScore
 				}
 				if model.LevelAtLeast(score, failLevel) {
 					return &exitError{code: 1, msg: "risk " + string(score) + " reached --fail-on " + failOn}
@@ -130,7 +130,7 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&headSHA, "head-sha", "", "commit being judged (default: git rev-parse HEAD)")
 	cmd.Flags().StringVar(&repo, "repo", "", "owner/name, used only for links (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit 1 when the score reaches this level (medium|high|critical)")
-	cmd.Flags().BoolVar(&machineOnly, "fail-on-machine-only", false, "with --fail-on, count only deterministic (match) verdicts")
+	cmd.Flags().BoolVar(&ruleOnly, "fail-on-rule-only", false, "with --fail-on, count only deterministic (match) verdicts")
 	return cmd
 }
 
