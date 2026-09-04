@@ -112,6 +112,7 @@ llm:
   provider: anthropic        # anthropic only, for now
   model: claude-opus-5
   max_plan_chars: 100000     # skip the LLM call and mark every check unverifiable above this size
+  max_tokens: 128000         # max_tokens for the judging call; lower it only for a model with a smaller output cap
   pricing:                   # USD / Mtok, used only for the footer's cost estimate; built-in default if omitted
     input: 5.00
     cache_write: 6.25

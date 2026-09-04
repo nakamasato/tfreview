@@ -140,6 +140,13 @@ func judgeTarget(ctx context.Context, provider llm.Provider, req llm.Request) ([
 		case err != nil && errors.Is(err, anthropic.ErrPlanTooLarge):
 			v.Kind = model.VerdictUnverifiable
 			v.Reason = "plan too large for LLM judgement: " + err.Error()
+		case err != nil && errors.Is(err, anthropic.ErrResponseTruncated):
+			// Unlike ErrPlanTooLarge, truncation isn't deterministic (response length
+			// varies run to run), so this must stay Skipped rather than Unverifiable:
+			// state.Put excludes Skipped from the cache, letting a retry re-judge it
+			// instead of freezing a one-off truncation for the plan's lifetime.
+			v.Kind = model.VerdictSkipped
+			v.Reason = "LLM response was truncated by max_tokens; split the config or reduce the number of checks: " + err.Error()
 		case err != nil:
 			v.Kind = model.VerdictSkipped
 			v.Reason = "LLM judgement failed: " + err.Error()
