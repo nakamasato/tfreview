@@ -112,8 +112,8 @@ func TestReviewFailOn(t *testing.T) {
 	require.Equal(t, 2, exitCode(err))
 }
 
-// --fail-on-machine-only must work even when the LLM is unavailable. Verify that
-// it exits 1 once the machine verdicts alone reach critical, even while the
+// --fail-on-rule-only must work even when the LLM is unavailable. Verify that
+// it exits 1 once the rule verdicts alone reach critical, even while the
 // llm-only verdict is skipped (Incomplete).
 func TestReviewFailOnMachineOnlyIgnoresIncomplete(t *testing.T) {
 	const cfg = `
@@ -132,14 +132,14 @@ categories:
 	// No answer is returned for llm-only, so that verdict is skipped -> result.Incomplete = true
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{}`)
 
-	// The default (machineOnly=false) skips the fail-on check entirely when Incomplete
+	// The default (ruleOnly=false) skips the fail-on check entirely when Incomplete
 	err := run(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o1"), "--fail-on", "critical")
 	require.NoError(t, err)
 
-	// --fail-on-machine-only ignores Incomplete and fails on the machine verdict (critical).
+	// --fail-on-rule-only ignores Incomplete and fails on the rule verdict (critical).
 	// The posted label/comment still show tfreview:unknown, so stderr must say so explicitly
 	// or a reviewer sees a failing CI check next to a comment that looks unjudged.
-	_, stderr, err := runCapture(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-machine-only")
+	_, stderr, err := runCapture(t, "review", "--plan", p, "--config", cfgPath, "--out-dir", filepath.Join(dir, "o2"), "--fail-on", "critical", "--fail-on-rule-only")
 	require.Equal(t, 1, exitCode(err))
 	require.Contains(t, stderr, "tfreview:unknown")
 }

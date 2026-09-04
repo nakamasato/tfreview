@@ -111,22 +111,22 @@ func newReviewCmd() *cobra.Command {
 				cmd.PrintErrln(line)
 			}
 
-			// --fail-on-machine-only exists to block deterministically regardless of
-			// LLM availability, so when machineOnly is set, ignore result.Incomplete
-			// (which stems from a skipped LLM verdict) and judge on MachineScore alone.
-			// The default (machineOnly=false) keeps skipping fail-on on Incomplete.
-			if failOn != "" && (machineOnly || !result.Incomplete) {
+			// --fail-on-rule-only exists to block deterministically regardless of
+			// LLM availability, so when ruleOnly is set, ignore result.Incomplete
+			// (which stems from a skipped LLM verdict) and judge on RuleScore alone.
+			// The default (ruleOnly=false) keeps skipping fail-on on Incomplete.
+			if failOn != "" && (ruleOnly || !result.Incomplete) {
 				score := result.Score
 				if ruleOnly {
 					score = result.RuleScore
 				}
 				if model.LevelAtLeast(score, failLevel) {
-					if machineOnly && result.Incomplete {
+					if ruleOnly && result.Incomplete {
 						// The posted label/comment (built from the combined score) still
 						// say result.Label here, e.g. "tfreview:unknown", because some LLM
 						// checks were skipped. Without this, a reviewer sees a red CI check
 						// next to a comment that looks like nothing was judged yet.
-						cmd.PrintErrf("note: failing on the machine-only score (%s) even though some LLM checks were skipped; the posted label/comment still read %q\n", score, result.Label)
+						cmd.PrintErrf("note: failing on the rule-only score (%s) even though some LLM checks were skipped; the posted label/comment still read %q\n", score, result.Label)
 					}
 					return &exitError{code: 1, msg: "risk " + string(score) + " reached --fail-on " + failOn}
 				}
