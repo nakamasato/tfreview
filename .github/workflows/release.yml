@@ -26,7 +26,6 @@ jobs:
       # binaries to it rather than creating one of its own.
       - uses: goreleaser/goreleaser-action@v7
         with:
-          distribution: goreleaser
           version: "~> v2"
           args: release --clean
         env:
