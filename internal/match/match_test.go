@@ -29,7 +29,7 @@ func TestEvaluateActionsHit(t *testing.T) {
 	v, ok := Evaluate(model.Check{ID: "del", Match: model.Match{Actions: []string{"delete"}}, OnMatch: model.OnMatchHit}, plans())
 	require.True(t, ok)
 	require.Equal(t, model.VerdictHit, v.Kind)
-	require.Equal(t, model.SourceMachine, v.Source)
+	require.Equal(t, model.SourceRule, v.Source)
 	require.Contains(t, v.Reason, "aws_db_instance.main")
 	require.Equal(t, "del", v.CheckID)
 }

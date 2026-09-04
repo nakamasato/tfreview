@@ -56,14 +56,14 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 		return out, nil
 	}
 	if !anyChanges(in.Plans) {
-		// Every check asks "what changed", so with zero diff neither machine nor LLM
+		// Every check asks "what changed", so with zero diff neither a rule nor an LLM
 		// judgement can produce anything meaningful — skip calling them at all.
 		out.NoChanges = true
 		return out, nil
 	}
 
 	checks := cfg.Checks()
-	machine := map[string]bool{}
+	ruleDecided := map[string]bool{}
 	askFallback := map[string]model.Verdict{}
 	for _, ck := range checks {
 		v, ok := match.Evaluate(ck, in.Plans)
@@ -77,12 +77,12 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 			continue
 		}
 		out.Verdicts[ck.ID] = v
-		machine[ck.ID] = true
+		ruleDecided[ck.ID] = true
 	}
 
 	var llmChecks []model.Check
 	for _, ck := range checks {
-		if !machine[ck.ID] && ck.Question != "" {
+		if !ruleDecided[ck.ID] && ck.Question != "" {
 			llmChecks = append(llmChecks, ck)
 		}
 	}
@@ -108,7 +108,7 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 	// Record incompleteness before merging: after merge, a skipped verdict loses to
 	// whatever it's merged with and leaves no trace.
 	for id, vs := range candidates {
-		if machine[id] {
+		if ruleDecided[id] {
 			// A target reused from state may still carry a stale verdict for a check
 			// that used to require an LLM judgement but this time was settled by
 			// match alone. Don't let that stale candidate override match's decisive

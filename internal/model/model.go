@@ -51,8 +51,8 @@ func (v VerdictKind) Rank() int { return verdictRank[v] }
 type Source string
 
 const (
-	SourceMachine Source = "machine"
-	SourceLLM     Source = "llm"
+	SourceRule Source = "rule"
+	SourceLLM  Source = "llm"
 )
 
 type Verdict struct {

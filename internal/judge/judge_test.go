@@ -67,7 +67,7 @@ func TestRunNoChangesSkipsLLM(t *testing.T) {
 	require.Empty(t, p.Calls)
 }
 
-func TestRunMachineAndLLM(t *testing.T) {
+func TestRunRuleAndLLM(t *testing.T) {
 	p := &mock.Provider{Answers: map[string][]llm.Answer{
 		"prd": {{CheckID: "delete-or-replace", Kind: model.VerdictHit, Reason: "db deleted"}, {CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "no sg"}},
 		"dev": {{CheckID: "delete-or-replace", Kind: model.VerdictMiss, Reason: "nothing"}, {CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "no sg"}},
@@ -78,7 +78,7 @@ func TestRunMachineAndLLM(t *testing.T) {
 	require.Equal(t, model.VerdictHit, out.Verdicts["delete-or-replace"].Kind)
 	require.Equal(t, model.SourceLLM, out.Verdicts["delete-or-replace"].Source)
 	require.Equal(t, model.VerdictMiss, out.Verdicts["shared"].Kind)
-	require.Equal(t, model.SourceMachine, out.Verdicts["shared"].Source)
+	require.Equal(t, model.SourceRule, out.Verdicts["shared"].Source)
 	require.Equal(t, model.VerdictMiss, out.Verdicts["sg-open"].Kind)
 	require.Empty(t, out.Unevaluated)
 	require.Equal(t, 2, out.Usage.Calls)
@@ -99,7 +99,7 @@ func TestRunAskFallbackWhenOneTargetFails(t *testing.T) {
 	require.NoError(t, err)
 	v := out.Verdicts["delete-or-replace"]
 	require.Equal(t, model.VerdictHit, v.Kind)
-	require.Equal(t, model.SourceMachine, v.Source)
+	require.Equal(t, model.SourceRule, v.Source)
 	require.Contains(t, v.Reason, "using plan facts")
 	require.False(t, out.Unevaluated["delete-or-replace"])
 	// sg-open was skipped for prd -> judgement is incomplete
@@ -128,11 +128,11 @@ func TestRunReusesState(t *testing.T) {
 	require.Equal(t, 0, out.Usage.Calls)
 }
 
-func TestRunMachineMissNotOverriddenByStaleCachedVerdict(t *testing.T) {
-	// prd's current plan has no delete, so match settles it as a machine miss.
+func TestRunRuleMissNotOverriddenByStaleCachedVerdict(t *testing.T) {
+	// prd's current plan has no delete, so match settles it as a rule miss.
 	// But state still holds the verdict from a previous run where the LLM said hit
 	// (e.g. it had a delete back then). That stale candidate must not override
-	// this run's machine miss.
+	// this run's rule miss.
 	c := runCfgParsed(t)
 	prdNoDelete := &plan.Plan{Target: "prd", Counts: plan.Counts{Add: 1}, Resources: []plan.Resource{{Address: "aws_sqs_queue.q", Type: "aws_sqs_queue", Actions: []string{"create"}}}}
 	prev := state.New("old", c.Digest)
@@ -146,7 +146,7 @@ func TestRunMachineMissNotOverriddenByStaleCachedVerdict(t *testing.T) {
 	out, err := Run(context.Background(), Input{Config: c, Plans: []*plan.Plan{prdNoDelete, dev()}, Provider: p, Prev: prev, HeadSHA: "sha"})
 	require.NoError(t, err)
 	v := out.Verdicts["delete-or-replace"]
-	require.Equal(t, model.SourceMachine, v.Source)
+	require.Equal(t, model.SourceRule, v.Source)
 	require.Equal(t, model.VerdictMiss, v.Kind)
 }
 

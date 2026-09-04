@@ -37,7 +37,7 @@ func fixture(t *testing.T, lang string) (*config.Config, *judge.Output, Meta) {
 	out := &judge.Output{
 		Verdicts: map[string]model.Verdict{
 			"delete-or-replace": {CheckID: "delete-or-replace", Kind: model.VerdictHit, Reason: "aws_db_instance.main is deleted | replaced", Source: model.SourceLLM},
-			"shared":            {CheckID: "shared", Kind: model.VerdictMiss, Reason: "no resource matched", Source: model.SourceMachine},
+			"shared":            {CheckID: "shared", Kind: model.VerdictMiss, Reason: "no resource matched", Source: model.SourceRule},
 			"sg-open":           {CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "no security group\nchanged", Source: model.SourceLLM},
 		},
 		Unevaluated: map[string]bool{},
@@ -55,7 +55,7 @@ func TestBuild(t *testing.T) {
 	c, out, meta := fixture(t, "en")
 	r := Build(c, out, meta)
 	require.Equal(t, model.LevelCritical, r.Score)
-	require.Equal(t, model.LevelNone, r.MachineScore)
+	require.Equal(t, model.LevelNone, r.RuleScore)
 	require.False(t, r.Incomplete)
 	require.Equal(t, "tfreview:critical", r.Label)
 	require.Len(t, r.Categories, 2)
@@ -123,7 +123,7 @@ func TestCommentEscapesMarkerLikeConfigAndTargetData(t *testing.T) {
 		Unevaluated: []string{End}, HeadSHA: "abc1234", JudgedAt: "2026-09-02T00:00:00Z",
 		Categories: []CategoryResult{{
 			ID: "cat", Title: "cat " + End, Score: model.LevelCritical, Hits: 1, Total: 1,
-			Checks: []CheckResult{{ID: "check " + End, Level: model.LevelCritical, Verdict: model.VerdictHit, Reason: "ok", Source: model.SourceMachine}},
+			Checks: []CheckResult{{ID: "check " + End, Level: model.LevelCritical, Verdict: model.VerdictHit, Reason: "ok", Source: model.SourceRule}},
 		}},
 		Targets: []TargetResult{{Target: "prd " + End}},
 	}
