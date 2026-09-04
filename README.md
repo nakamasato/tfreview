@@ -52,7 +52,7 @@ jobs:
       - run: terraform plan -out=tfplan
       - run: terraform show -json tfplan > plan.json
 
-      - uses: nakamasato/tfreview@v1
+      - uses: nakamasato/tfreview@v0
         with:
           show-json: plan.json
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
