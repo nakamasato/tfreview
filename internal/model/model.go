@@ -1,37 +1,40 @@
-// Package model defines the vocabulary for verdicts (levels, verdicts, checks).
+// Package model defines the vocabulary for verdicts (severities, verdicts, checks).
 package model
 
-import "fmt"
-
-type Level string
-
-const (
-	LevelNone     Level = "none"
-	LevelMedium   Level = "medium"
-	LevelHigh     Level = "high"
-	LevelCritical Level = "critical"
+import (
+	"fmt"
+	"slices"
 )
 
-var levelRank = map[Level]int{LevelNone: 0, LevelMedium: 1, LevelHigh: 2, LevelCritical: 3}
+type Severity string
 
-func ParseLevel(s string) (Level, error) {
-	l := Level(s)
-	if _, ok := levelRank[l]; !ok {
-		return "", fmt.Errorf("unknown level %q (want none|medium|high|critical)", s)
+const (
+	SeverityNone     Severity = "none"
+	SeverityMedium   Severity = "medium"
+	SeverityHigh     Severity = "high"
+	SeverityCritical Severity = "critical"
+)
+
+var severityRank = map[Severity]int{SeverityNone: 0, SeverityMedium: 1, SeverityHigh: 2, SeverityCritical: 3}
+
+func ParseSeverity(s string) (Severity, error) {
+	sv := Severity(s)
+	if _, ok := severityRank[sv]; !ok {
+		return "", fmt.Errorf("unknown severity %q (want none|medium|high|critical)", s)
 	}
-	return l, nil
+	return sv, nil
 }
 
-func (l Level) Rank() int { return levelRank[l] }
+func (s Severity) Rank() int { return severityRank[s] }
 
-func MaxLevel(a, b Level) Level {
+func MaxSeverity(a, b Severity) Severity {
 	if b.Rank() > a.Rank() {
 		return b
 	}
 	return a
 }
 
-func LevelAtLeast(l, threshold Level) bool { return l.Rank() >= threshold.Rank() }
+func SeverityAtLeast(s, threshold Severity) bool { return s.Rank() >= threshold.Rank() }
 
 type VerdictKind string
 
@@ -56,10 +59,12 @@ const (
 )
 
 type Verdict struct {
-	CheckID string      `json:"check_id"`
-	Kind    VerdictKind `json:"verdict"`
-	Reason  string      `json:"reason"`
-	Source  Source      `json:"source"`
+	CheckID   string      `json:"check_id"`
+	Kind      VerdictKind `json:"verdict"`
+	Reason    string      `json:"reason"`
+	Source    Source      `json:"source"`
+	Severity  Severity    `json:"severity,omitempty"`
+	Resources []string    `json:"resources,omitempty"`
 }
 
 type Match struct {
@@ -80,16 +85,36 @@ const (
 	OnMatchUnverifiable OnMatch = "unverifiable"
 )
 
+const (
+	RequiresDiff = "diff"
+	RequiresPR   = "pr"
+)
+
+func HasRequirement(reqs []string, req string) bool { return slices.Contains(reqs, req) }
+
 type Check struct {
 	ID       string
-	Level    Level
+	Severity Severity
 	Match    Match
 	OnMatch  OnMatch
 	Question string
+	Requires []string
 }
 
-type Category struct {
+type Aspect struct {
 	ID     string
 	Title  string
 	Checks []Check
+}
+
+// Checkpoint is knowledge attached to a resource type. It is always LLM-judged:
+// Severity is what the config author declared for the class of problem, while the
+// Severity on a resulting Verdict is what the model judged for this plan.
+type Checkpoint struct {
+	ID         string
+	Aspect     string
+	Severity   Severity
+	Guidance   string
+	Requires   []string
+	References []string
 }

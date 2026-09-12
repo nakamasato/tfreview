@@ -37,13 +37,13 @@ func newReviewCmd() *cobra.Command {
 		Use:   "review",
 		Short: "Judge plan JSON files against the configured checks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			var failLevel model.Level
+			var failSeverity model.Severity
 			if failOn != "" {
-				l, err := model.ParseLevel(failOn)
+				sv, err := model.ParseSeverity(failOn)
 				if err != nil {
 					return &exitError{code: 2, msg: "--fail-on: " + err.Error()}
 				}
-				failLevel = l
+				failSeverity = sv
 			}
 
 			cfg, err := loadConfig(configPath)
@@ -120,7 +120,7 @@ func newReviewCmd() *cobra.Command {
 				if ruleOnly {
 					score = result.RuleScore
 				}
-				if model.LevelAtLeast(score, failLevel) {
+				if model.SeverityAtLeast(score, failSeverity) {
 					if ruleOnly && result.Incomplete {
 						// The posted label/comment (built from the combined score) still
 						// say result.Label here, e.g. "tfreview:unknown", because some LLM
@@ -216,8 +216,8 @@ func unmatchedTargetWarnings(cfg *config.Config, ps []*plan.Plan) []string {
 
 	var order []string
 	byTarget := map[string][]string{}
-	for _, cat := range cfg.Categories {
-		for _, ck := range cat.Checks {
+	for _, asp := range cfg.Aspects {
+		for _, ck := range asp.Checks {
 			for _, t := range ck.Match.Targets {
 				if loaded[t] {
 					continue

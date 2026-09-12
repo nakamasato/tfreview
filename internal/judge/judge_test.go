@@ -16,24 +16,24 @@ import (
 )
 
 const runCfg = `
-categories:
+aspects:
   - id: destruction
     title: D
     checks:
       - id: delete-or-replace
-        level: critical
+        severity: critical
         match: {actions: [delete]}
         verdict_on_match: ask
         question: deleted?
       - id: shared
-        level: critical
+        severity: critical
         match: {targets: [shared]}
         verdict_on_match: unverifiable
   - id: exposure
     title: E
     checks:
       - id: sg-open
-        level: high
+        severity: high
         question: open?
 `
 

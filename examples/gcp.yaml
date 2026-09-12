@@ -5,12 +5,12 @@ llm:
   provider: anthropic
   model: claude-opus-5
 
-categories:
+aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
       - id: delete-or-replace
-        level: critical
+        severity: critical
         match: { actions: [delete] }
         verdict_on_match: ask
         question: |
@@ -24,12 +24,12 @@ categories:
       # replacement here breaks a downstream target's terraform_remote_state read,
       # since the downstream plan did not run.
       - id: shared-target
-        level: critical
+        severity: critical
         match: { targets: [shared, network-prd] }
         verdict_on_match: unverifiable
 
       - id: cloud-run-downtime
-        level: high
+        severity: high
         question: |
           Could a Cloud Run service or load balancer backend replacement drop
           requests? Judge only from the plan (replaced resources, traffic split,
@@ -39,7 +39,7 @@ categories:
     title: Data loss
     checks:
       - id: stateful-delete
-        level: critical
+        severity: critical
         match:
           actions: [delete]
           types: [google_sql_database_instance, google_storage_bucket, google_bigquery_dataset, google_bigquery_table, google_spanner_instance, google_firestore_database, google_redis_instance]
@@ -48,7 +48,7 @@ categories:
           Is a resource holding data deleted or replaced? Is there a recovery path?
 
       - id: guard-relaxed
-        level: critical
+        severity: critical
         question: |
           Is deletion_protection, force_destroy, or a backup setting changed toward
           the side that loses data? Decide from `changed_keys` only. If there are no
@@ -58,20 +58,20 @@ categories:
     title: Permissions / exposure
     checks:
       - id: human-write-grant
-        level: high
+        severity: high
         question: |
           Is a write-capable role (roles/owner, roles/editor, *.admin,
           roles/iam.securityAdmin, …) granted to a `user:` principal? `serviceAccount:`
           does not count. Answer only whether it happens. Viewer roles do not count.
 
       - id: firewall-open
-        level: high
+        severity: high
         question: |
           Is 0.0.0.0/0 or ::/0 added to a firewall rule's source_ranges for an allow
           rule? Which ports open? Decide from `changed_keys`.
 
       - id: bucket-public
-        level: high
+        severity: high
         question: |
           Is allUsers or allAuthenticatedUsers granted on a bucket, or is
           public_access_prevention relaxed? Decide from `changed_keys`.
@@ -80,7 +80,7 @@ categories:
     title: Cost
     checks:
       - id: recurring-charge
-        level: high
+        severity: high
         question: |
           Do recurring charges increase? Name the resource and attribute (machine
           type, tier, disk size, min instances, a new always-on resource). Do not

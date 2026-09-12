@@ -3,6 +3,6 @@
 *.test
 
 # local-only Claude Code files
-.claude/CLAUDE.local.md
+CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/

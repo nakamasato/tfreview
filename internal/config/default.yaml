@@ -1,9 +1,9 @@
-categories:
+aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
       - id: delete-or-replace
-        level: critical
+        severity: critical
         match: { actions: [delete] }
         verdict_on_match: ask
         question: |
@@ -15,7 +15,7 @@ categories:
     title: Data loss
     checks:
       - id: stateful-delete
-        level: critical
+        severity: critical
         match:
           actions: [delete]
           types:
@@ -36,7 +36,7 @@ categories:
             - azurerm_postgresql_flexible_server
             - azurerm_cosmosdb_account
       - id: guard-relaxed
-        level: critical
+        severity: critical
         question: |
           Is any of force_destroy, deletion_protection, skip_final_snapshot,
           backup_retention_period, or an equivalent guard changed toward the side
@@ -47,14 +47,14 @@ categories:
     title: Permissions / exposure
     checks:
       - id: privilege-grant
-        level: high
+        severity: high
         question: |
           Does this change grant write-capable permissions to a human principal,
           add a wildcard (*) to an IAM action or resource, or add a principal to a
           role's trust policy? Decide only from `changed_keys` and `after`. Do not
           excuse a grant because it might be justified; only answer whether it happens.
       - id: public-exposure
-        level: high
+        severity: high
         question: |
           Does this change open a resource to the internet: a security group or
           firewall rule with 0.0.0.0/0 or ::/0 ingress, a public access block being
@@ -64,7 +64,7 @@ categories:
     title: Cost
     checks:
       - id: recurring-charge
-        level: high
+        severity: high
         question: |
           Does this change increase recurring charges? Name the resource and the
           attribute that drives it (instance size, storage size, desired count, a

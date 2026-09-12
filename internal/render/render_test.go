@@ -18,16 +18,16 @@ import (
 var update = flag.Bool("update", false, "update golden files")
 
 const cfgYAML = `
-categories:
+aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
-      - {id: delete-or-replace, level: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
-      - {id: shared, level: critical, match: {targets: [shared]}, verdict_on_match: unverifiable}
+      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
+      - {id: shared, severity: critical, match: {targets: [shared]}, verdict_on_match: unverifiable}
   - id: exposure
     title: Permissions / exposure
     checks:
-      - {id: sg-open, level: high, question: q}
+      - {id: sg-open, severity: high, question: q}
 `
 
 func fixture(t *testing.T, lang string) (*config.Config, *judge.Output, Meta) {
@@ -54,15 +54,15 @@ func fixture(t *testing.T, lang string) (*config.Config, *judge.Output, Meta) {
 func TestBuild(t *testing.T) {
 	c, out, meta := fixture(t, "en")
 	r := Build(c, out, meta)
-	require.Equal(t, model.LevelCritical, r.Score)
-	require.Equal(t, model.LevelNone, r.RuleScore)
+	require.Equal(t, model.SeverityCritical, r.Score)
+	require.Equal(t, model.SeverityNone, r.RuleScore)
 	require.False(t, r.Incomplete)
 	require.Equal(t, "tfreview:critical", r.Label)
 	require.Len(t, r.Categories, 2)
 	require.Equal(t, 1, r.Categories[0].Hits)
 	require.Equal(t, 2, r.Categories[0].Total)
-	require.Equal(t, model.LevelCritical, r.Categories[0].Score)
-	require.Equal(t, model.LevelNone, r.Categories[1].Score)
+	require.Equal(t, model.SeverityCritical, r.Categories[0].Score)
+	require.Equal(t, model.SeverityNone, r.Categories[1].Score)
 	require.InDelta(t, 0.015, r.CostUSD, 1e-9)
 }
 
@@ -83,7 +83,7 @@ func TestBuildIncomplete(t *testing.T) {
 
 func TestCommentIncompleteWithoutUnevaluated(t *testing.T) {
 	r := &Result{
-		Score: model.LevelNone, Incomplete: true, Label: "tfreview:unknown",
+		Score: model.SeverityNone, Incomplete: true, Label: "tfreview:unknown",
 		Language: "en", Unevaluated: []string{}, Targets: []TargetResult{}, Categories: []CategoryResult{},
 		HeadSHA: "abc1234", JudgedAt: "2026-09-02T00:00:00Z",
 	}
@@ -119,11 +119,11 @@ func TestCellEscapesMarkerLikeReason(t *testing.T) {
 // to the whole body (see wrap), not only to Reason.
 func TestCommentEscapesMarkerLikeConfigAndTargetData(t *testing.T) {
 	r := &Result{
-		Score: model.LevelCritical, Label: "tfreview:critical", Language: "en",
+		Score: model.SeverityCritical, Label: "tfreview:critical", Language: "en",
 		Unevaluated: []string{End}, HeadSHA: "abc1234", JudgedAt: "2026-09-02T00:00:00Z",
 		Categories: []CategoryResult{{
-			ID: "cat", Title: "cat " + End, Score: model.LevelCritical, Hits: 1, Total: 1,
-			Checks: []CheckResult{{ID: "check " + End, Level: model.LevelCritical, Verdict: model.VerdictHit, Reason: "ok", Source: model.SourceRule}},
+			ID: "cat", Title: "cat " + End, Score: model.SeverityCritical, Hits: 1, Total: 1,
+			Checks: []CheckResult{{ID: "check " + End, Level: model.SeverityCritical, Verdict: model.VerdictHit, Reason: "ok", Source: model.SourceRule}},
 		}},
 		Targets: []TargetResult{{Target: "prd " + End}},
 	}
