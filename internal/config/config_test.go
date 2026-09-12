@@ -43,7 +43,7 @@ func TestParseMinimal(t *testing.T) {
 
 	ck, ok := c.Check("delete-or-replace")
 	require.True(t, ok)
-	require.Equal(t, model.LevelCritical, ck.Level)
+	require.Equal(t, model.SeverityCritical, ck.Severity)
 	require.Equal(t, model.OnMatchAsk, ck.OnMatch)
 	require.Equal(t, []string{"delete"}, ck.Match.Actions)
 

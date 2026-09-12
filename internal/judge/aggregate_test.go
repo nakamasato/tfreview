@@ -33,19 +33,19 @@ func TestScoreIsMax(t *testing.T) {
 		"med":  {Kind: model.VerdictHit, Source: model.SourceLLM},
 		"high": {Kind: model.VerdictUnverifiable, Source: model.SourceRule},
 	}
-	require.Equal(t, model.LevelHigh, Score(c, vs))
-	require.Equal(t, model.LevelMedium, CategoryScore(c.Categories[0], vs))
-	require.Equal(t, model.LevelHigh, RuleScore(c, vs))
+	require.Equal(t, model.SeverityHigh, Score(c, vs))
+	require.Equal(t, model.SeverityMedium, CategoryScore(c.Categories[0], vs))
+	require.Equal(t, model.SeverityHigh, RuleScore(c, vs))
 
 	vs["crit"] = model.Verdict{Kind: model.VerdictHit, Source: model.SourceLLM}
-	require.Equal(t, model.LevelCritical, Score(c, vs))
-	require.Equal(t, model.LevelHigh, RuleScore(c, vs))
+	require.Equal(t, model.SeverityCritical, Score(c, vs))
+	require.Equal(t, model.SeverityHigh, RuleScore(c, vs))
 }
 
 func TestScoreNoneWhenNothingHits(t *testing.T) {
 	c := cfg(t)
-	require.Equal(t, model.LevelNone, Score(c, map[string]model.Verdict{"crit": {Kind: model.VerdictMiss}}))
-	require.Equal(t, model.LevelNone, Score(c, nil))
+	require.Equal(t, model.SeverityNone, Score(c, map[string]model.Verdict{"crit": {Kind: model.VerdictMiss}}))
+	require.Equal(t, model.SeverityNone, Score(c, nil))
 }
 
 func TestIsIncomplete(t *testing.T) {

@@ -16,15 +16,16 @@ var unresolvedNote = map[model.VerdictKind]string{
 // The fact that a losing verdict was "unverifiable" or "not evaluated" is preserved
 // in the winner's reason — dropping it silently would hide that information from reviewers.
 func Merge(vs []model.Verdict) model.Verdict {
-	winner := vs[0]
-	for _, v := range vs[1:] {
-		if v.Kind.Rank() > winner.Kind.Rank() {
-			winner = v
+	winnerIdx := 0
+	for i, v := range vs[1:] {
+		if v.Kind.Rank() > vs[winnerIdx].Kind.Rank() {
+			winnerIdx = i + 1
 		}
 	}
+	winner := vs[winnerIdx]
 	notes := map[string]bool{}
-	for _, v := range vs {
-		if v == winner {
+	for i, v := range vs {
+		if i == winnerIdx {
 			continue
 		}
 		if n, ok := unresolvedNote[v.Kind]; ok {

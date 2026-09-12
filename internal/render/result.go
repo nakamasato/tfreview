@@ -15,19 +15,19 @@ import (
 
 type CheckResult struct {
 	ID      string            `json:"id"`
-	Level   model.Level       `json:"level"`
+	Level   model.Severity    `json:"level"`
 	Verdict model.VerdictKind `json:"verdict"`
 	Reason  string            `json:"reason"`
 	Source  model.Source      `json:"source"`
 }
 
 type CategoryResult struct {
-	ID     string        `json:"id"`
-	Title  string        `json:"title"`
-	Score  model.Level   `json:"score"`
-	Hits   int           `json:"hits"`
-	Total  int           `json:"total"`
-	Checks []CheckResult `json:"checks"`
+	ID     string         `json:"id"`
+	Title  string         `json:"title"`
+	Score  model.Severity `json:"score"`
+	Hits   int            `json:"hits"`
+	Total  int            `json:"total"`
+	Checks []CheckResult  `json:"checks"`
 }
 
 type TargetResult struct {
@@ -37,8 +37,8 @@ type TargetResult struct {
 }
 
 type Result struct {
-	Score       model.Level      `json:"score"`
-	RuleScore   model.Level      `json:"rule_score"`
+	Score       model.Severity   `json:"score"`
+	RuleScore   model.Severity   `json:"rule_score"`
 	Incomplete  bool             `json:"incomplete"`
 	Label       string           `json:"label"`
 	HeadSHA     string           `json:"head_sha"`
@@ -90,7 +90,7 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 			if v.Kind == model.VerdictHit || v.Kind == model.VerdictUnverifiable {
 				cr.Hits++
 			}
-			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Level, Verdict: v.Kind, Reason: v.Reason, Source: v.Source})
+			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Severity, Verdict: v.Kind, Reason: v.Reason, Source: v.Source})
 		}
 		r.Categories = append(r.Categories, cr)
 	}

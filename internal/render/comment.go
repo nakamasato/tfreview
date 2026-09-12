@@ -13,7 +13,7 @@ const (
 	End   = "<!-- tfreview:end -->"
 )
 
-var levelEmoji = map[model.Level]string{model.LevelNone: "🟢", model.LevelMedium: "🟡", model.LevelHigh: "🟠", model.LevelCritical: "🔴"}
+var severityEmoji = map[model.Severity]string{model.SeverityNone: "🟢", model.SeverityMedium: "🟡", model.SeverityHigh: "🟠", model.SeverityCritical: "🔴"}
 
 func Comment(r *Result) string {
 	s := t(r.Language)
@@ -28,10 +28,10 @@ func Comment(r *Result) string {
 			suffix = " (" + strings.Join(r.Unevaluated, ", ") + ")"
 		}
 		fmt.Fprintf(&b, "## 🔵 %s: %s%s\n\n", s.Risk, s.Incomplete, suffix)
-	case r.Score == model.LevelNone:
+	case r.Score == model.SeverityNone:
 		fmt.Fprintf(&b, "## 🟢 %s: none\n\n", s.Risk)
 	default:
-		fmt.Fprintf(&b, "## %s %s: %s — %s\n\n", levelEmoji[r.Score], s.Risk, r.Score, topCategory(r))
+		fmt.Fprintf(&b, "## %s %s: %s — %s\n\n", severityEmoji[r.Score], s.Risk, r.Score, topCategory(r))
 	}
 
 	if r.NoPlans {
@@ -51,7 +51,7 @@ func Comment(r *Result) string {
 
 	fmt.Fprintf(&b, "| %s | %s | %s |\n| --- | --- | --- |\n", s.Category, s.Risk, s.Hits)
 	for _, c := range r.Categories {
-		fmt.Fprintf(&b, "| %s | %s %s | %d/%d |\n", c.Title, levelEmoji[c.Score], c.Score, c.Hits, c.Total)
+		fmt.Fprintf(&b, "| %s | %s %s | %d/%d |\n", c.Title, severityEmoji[c.Score], c.Score, c.Hits, c.Total)
 	}
 	b.WriteString("\n")
 

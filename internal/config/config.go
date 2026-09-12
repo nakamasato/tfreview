@@ -32,7 +32,7 @@ type LLM struct {
 type Config struct {
 	Language   string
 	LLM        LLM
-	Categories []model.Category
+	Categories []model.Aspect
 	Digest     string
 }
 
@@ -110,7 +110,7 @@ func Parse(raw []byte) (*Config, error) {
 			return nil, errorf("category id %q is empty or duplicated", rcat.ID)
 		}
 		seenCat[rcat.ID] = true
-		cat := model.Category{ID: rcat.ID, Title: rcat.Title}
+		cat := model.Aspect{ID: rcat.ID, Title: rcat.Title}
 		if cat.Title == "" {
 			cat.Title = cat.ID
 		}
@@ -137,7 +137,7 @@ func convertCheck(r rawCheck) (model.Check, error) {
 	if r.ID == "" {
 		return model.Check{}, errorf("check id must not be empty")
 	}
-	level, err := model.ParseLevel(r.Level)
+	severity, err := model.ParseSeverity(r.Level)
 	if err != nil {
 		return model.Check{}, errorf("check %q: %v", r.ID, err)
 	}
@@ -166,7 +166,7 @@ func convertCheck(r rawCheck) (model.Check, error) {
 	if !m.IsZero() && (on == model.OnMatchHit || on == model.OnMatchUnverifiable) && r.Question != "" {
 		return model.Check{}, errorf("check %q: question has no effect with verdict_on_match %q; use ask or remove the question", r.ID, on)
 	}
-	return model.Check{ID: r.ID, Level: level, Match: m, OnMatch: on, Question: r.Question}, nil
+	return model.Check{ID: r.ID, Severity: severity, Match: m, OnMatch: on, Question: r.Question}, nil
 }
 
 func convertMatch(id string, raw map[string]any) (model.Match, error) {
@@ -223,7 +223,7 @@ func (c *Config) Check(id string) (model.Check, bool) {
 	return model.Check{}, false
 }
 
-func (c *Config) CategoryOf(checkID string) (model.Category, bool) {
+func (c *Config) CategoryOf(checkID string) (model.Aspect, bool) {
 	for _, cat := range c.Categories {
 		for _, ck := range cat.Checks {
 			if ck.ID == checkID {
@@ -231,5 +231,5 @@ func (c *Config) CategoryOf(checkID string) (model.Category, bool) {
 			}
 		}
 	}
-	return model.Category{}, false
+	return model.Aspect{}, false
 }
