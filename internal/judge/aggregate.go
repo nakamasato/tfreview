@@ -11,9 +11,9 @@ func counts(k model.VerdictKind) bool {
 	return k == model.VerdictHit || k == model.VerdictUnverifiable
 }
 
-func CategoryScore(cat model.Aspect, verdicts map[string]model.Verdict) model.Severity {
+func AspectScore(asp model.Aspect, verdicts map[string]model.Verdict) model.Severity {
 	score := model.SeverityNone
-	for _, ck := range cat.Checks {
+	for _, ck := range asp.Checks {
 		if v, ok := verdicts[ck.ID]; ok && counts(v.Kind) {
 			score = model.MaxSeverity(score, ck.Severity)
 		}
@@ -25,8 +25,8 @@ func CategoryScore(cat model.Aspect, verdicts map[string]model.Verdict) model.Se
 // among nine passing checks.
 func Score(cfg *config.Config, verdicts map[string]model.Verdict) model.Severity {
 	score := model.SeverityNone
-	for _, cat := range cfg.Categories {
-		score = model.MaxSeverity(score, CategoryScore(cat, verdicts))
+	for _, asp := range cfg.Aspects {
+		score = model.MaxSeverity(score, AspectScore(asp, verdicts))
 	}
 	return score
 }

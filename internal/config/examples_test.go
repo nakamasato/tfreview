@@ -12,7 +12,7 @@ func TestExamplesAreValid(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			c, err := Load(filepath.Join("..", "..", "examples", name))
 			require.NoError(t, err)
-			require.NotEmpty(t, c.Categories)
+			require.NotEmpty(t, c.Aspects)
 			_, ok := c.Check("delete-or-replace")
 			require.True(t, ok)
 		})

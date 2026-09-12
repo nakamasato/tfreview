@@ -11,16 +11,16 @@ import (
 func cfg(t *testing.T) *config.Config {
 	t.Helper()
 	c, err := config.Parse([]byte(`
-categories:
+aspects:
   - id: c1
     title: C1
     checks:
-      - {id: crit, level: critical, question: q}
-      - {id: med, level: medium, question: q}
+      - {id: crit, severity: critical, question: q}
+      - {id: med, severity: medium, question: q}
   - id: c2
     title: C2
     checks:
-      - {id: high, level: high, match: {actions: [delete]}}
+      - {id: high, severity: high, match: {actions: [delete]}}
 `))
 	require.NoError(t, err)
 	return c
@@ -34,7 +34,7 @@ func TestScoreIsMax(t *testing.T) {
 		"high": {Kind: model.VerdictUnverifiable, Source: model.SourceRule},
 	}
 	require.Equal(t, model.SeverityHigh, Score(c, vs))
-	require.Equal(t, model.SeverityMedium, CategoryScore(c.Categories[0], vs))
+	require.Equal(t, model.SeverityMedium, AspectScore(c.Aspects[0], vs))
 	require.Equal(t, model.SeverityHigh, RuleScore(c, vs))
 
 	vs["crit"] = model.Verdict{Kind: model.VerdictHit, Source: model.SourceLLM}

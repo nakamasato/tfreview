@@ -44,12 +44,12 @@ func writeCfg(t *testing.T, dir, body string) string {
 
 const mockCfg = `
 llm: {provider: mock}
-categories:
+aspects:
   - id: destruction
     title: D
     checks:
-      - {id: delete-or-replace, level: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
-      - {id: llm-only, level: high, question: q}
+      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
+      - {id: llm-only, severity: high, question: q}
 `
 
 func TestExtractWritesPlan(t *testing.T) {
@@ -118,12 +118,12 @@ func TestReviewFailOn(t *testing.T) {
 func TestReviewFailOnMachineOnlyIgnoresIncomplete(t *testing.T) {
 	const cfg = `
 llm: {provider: mock}
-categories:
+aspects:
   - id: destruction
     title: D
     checks:
-      - {id: shared, level: critical, match: {targets: [prd]}, verdict_on_match: unverifiable}
-      - {id: llm-only, level: high, question: q}
+      - {id: shared, severity: critical, match: {targets: [prd]}, verdict_on_match: unverifiable}
+      - {id: llm-only, severity: high, question: q}
 `
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
@@ -166,7 +166,7 @@ func TestReviewReusesState(t *testing.T) {
 func TestReviewInvalidConfigExit2(t *testing.T) {
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
-	cfg := writeCfg(t, dir, "categories: []")
+	cfg := writeCfg(t, dir, "aspects: []")
 	err := run(t, "review", "--plan", p, "--config", cfg, "--out-dir", filepath.Join(dir, "o"))
 	require.Equal(t, 2, exitCode(err))
 }
@@ -209,11 +209,11 @@ func TestReviewWarnsOnUnmatchedMatchTargets(t *testing.T) {
 	p := extractFixture(t, dir, "dev")
 	cfg := writeCfg(t, dir, `
 llm: {provider: mock}
-categories:
+aspects:
   - id: destruction
     title: D
     checks:
-      - {id: prod-only, level: critical, match: {targets: [prod]}, verdict_on_match: ask, question: q}
+      - {id: prod-only, severity: critical, match: {targets: [prod]}, verdict_on_match: ask, question: q}
 `)
 	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{}`)
@@ -230,7 +230,7 @@ categories:
 func TestReviewWarnsWhenAnthropicKeyMissing(t *testing.T) {
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
-	cfg := writeCfg(t, dir, "llm: {provider: anthropic}\ncategories:\n  - id: destruction\n    title: D\n    checks:\n      - {id: llm-only, level: high, question: q}\n")
+	cfg := writeCfg(t, dir, "llm: {provider: anthropic}\naspects:\n  - id: destruction\n    title: D\n    checks:\n      - {id: llm-only, severity: high, question: q}\n")
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	outDir := filepath.Join(dir, "out")
 

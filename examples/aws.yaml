@@ -16,12 +16,12 @@ llm:
   provider: anthropic
   model: claude-opus-5
 
-categories:
+aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
       - id: delete-or-replace
-        level: critical
+        severity: critical
         match: { actions: [delete] }
         verdict_on_match: ask
         question: |
@@ -36,12 +36,12 @@ categories:
       # downstream target's terraform_remote_state read, since the downstream plan
       # did not run.
       - id: shared-target
-        level: critical
+        severity: critical
         match: { targets: [network-prd, shared] }
         verdict_on_match: unverifiable
 
       - id: ecs-downtime
-        level: high
+        severity: high
         question: |
           Could an ECS service, ALB, or target group replacement drop requests?
           Judge only from what the plan shows (replaced resources, desired_count,
@@ -52,7 +52,7 @@ categories:
     title: Data loss
     checks:
       - id: stateful-delete
-        level: critical
+        severity: critical
         match:
           actions: [delete]
           types: [aws_db_instance, aws_rds_cluster, aws_dynamodb_table, aws_s3_bucket, aws_efs_file_system, aws_elasticache_cluster]
@@ -62,7 +62,7 @@ categories:
           (snapshot, versioning, backup)?
 
       - id: guard-relaxed
-        level: critical
+        severity: critical
         question: |
           Is force_destroy, deletion_protection, skip_final_snapshot, or
           backup_retention_period changed toward the side that loses data? Decide
@@ -73,33 +73,33 @@ categories:
     title: Permissions / exposure
     checks:
       - id: iam-wildcard
-        level: high
+        severity: high
         question: |
           Is a wildcard (*) added to an IAM policy Action or Resource? If so, which
           role gains what? Decide from `changed_keys`; editing another attribute of a
           policy that already had a wildcard does not count.
 
       - id: trust-policy
-        level: high
+        severity: high
         question: |
           Is a principal added to a role's assume_role_policy? If so, who can now
           assume it? If assume_role_policy is not in `changed_keys`, it did not change.
 
       - id: human-write-grant
-        level: high
+        severity: high
         question: |
           Is a write-capable policy attached to an IAM user (not a role used by CI
           or workloads)? Answer only whether it happens; do not excuse it because it
           might be justified. Read-only policies (ReadOnlyAccess) do not count.
 
       - id: sg-open
-        level: high
+        severity: high
         question: |
           Is 0.0.0.0/0 or ::/0 added to a security group ingress rule? Which ports
           open to the internet? Decide from `changed_keys`.
 
       - id: s3-public
-        level: high
+        severity: high
         question: |
           Is an S3 public access block relaxed, or a bucket policy changed to allow
           anonymous access? Decide from `changed_keys`.
@@ -108,7 +108,7 @@ categories:
     title: Cost
     checks:
       - id: recurring-charge
-        level: high
+        severity: high
         question: |
           Do recurring charges increase? Name the resource and attribute
           (instance_class, instance_type, allocated_storage, desired_count, a new NAT

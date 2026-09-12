@@ -216,8 +216,8 @@ func unmatchedTargetWarnings(cfg *config.Config, ps []*plan.Plan) []string {
 
 	var order []string
 	byTarget := map[string][]string{}
-	for _, cat := range cfg.Categories {
-		for _, ck := range cat.Checks {
+	for _, asp := range cfg.Aspects {
+		for _, ck := range asp.Checks {
 			for _, t := range ck.Match.Targets {
 				if loaded[t] {
 					continue

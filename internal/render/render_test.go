@@ -18,16 +18,16 @@ import (
 var update = flag.Bool("update", false, "update golden files")
 
 const cfgYAML = `
-categories:
+aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
-      - {id: delete-or-replace, level: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
-      - {id: shared, level: critical, match: {targets: [shared]}, verdict_on_match: unverifiable}
+      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
+      - {id: shared, severity: critical, match: {targets: [shared]}, verdict_on_match: unverifiable}
   - id: exposure
     title: Permissions / exposure
     checks:
-      - {id: sg-open, level: high, question: q}
+      - {id: sg-open, severity: high, question: q}
 `
 
 func fixture(t *testing.T, lang string) (*config.Config, *judge.Output, Meta) {

@@ -80,9 +80,9 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 	}
 	sort.Strings(r.Unevaluated)
 
-	for _, cat := range cfg.Categories {
-		cr := CategoryResult{ID: cat.ID, Title: cat.Title, Score: judge.CategoryScore(cat, out.Verdicts), Total: len(cat.Checks), Checks: []CheckResult{}}
-		for _, ck := range cat.Checks {
+	for _, asp := range cfg.Aspects {
+		cr := CategoryResult{ID: asp.ID, Title: asp.Title, Score: judge.AspectScore(asp, out.Verdicts), Total: len(asp.Checks), Checks: []CheckResult{}}
+		for _, ck := range asp.Checks {
 			v, ok := out.Verdicts[ck.ID]
 			if !ok {
 				v = model.Verdict{CheckID: ck.ID, Kind: model.VerdictSkipped, Reason: "not evaluated", Source: model.SourceLLM}
