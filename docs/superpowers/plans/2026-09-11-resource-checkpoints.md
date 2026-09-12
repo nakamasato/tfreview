@@ -2126,6 +2126,12 @@ checkpoints_for_resource:
 Write the remaining types in the same shape. Every `guidance` must name the attribute or
 value the model should look at; none may be a principle ("use least privilege").
 
+Every checkpoint must be justified from the provider's or the cloud's own public
+documentation, and carry that URL in `references` wherever one exists. Never write one because
+someone saw it happen somewhere: if the behaviour is not publicly documented, it does not go
+into the shipped defaults. This keeps the defaults verifiable by anyone reading them, and keeps
+material observed in private repositories out of a public one.
+
 - [ ] **Step 5: Rewrite the examples**
 
 `examples/aws.yaml` and `examples/gcp.yaml` become the larger, opinionated versions: the same

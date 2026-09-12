@@ -11,21 +11,21 @@ the knowledge that actually accumulates in a team: *"in this resource type, this
 attribute combination causes this specific accident."* There is nowhere to put a hundred of
 those, and if there were, sending a hundred questions with every plan would be unaffordable.
 
-Examples of what that knowledge looks like in practice, all of them rooted in documented
-provider or cloud API behaviour:
+The knowledge that fills that gap is always of the same shape — a property of one resource
+type, documented by the provider or the cloud API, that a reviewer has to remember:
 
-- `google_cloud_run_v2_service`: not declaring the `traffic` block leaves the attribute
-  Optional+Computed, so a switch to pinned-revision serving produces no plan diff at all.
-- `google_sql_database_instance`: omitting `edition` lets the API pick a default that is
-  incompatible with shared-core tiers, and creation fails at apply time.
-- `aws_iam_policy`: an SSM document ARN written in the AWS-owned form instead of the
-  account-scoped form evaluates to `implicitDeny` at runtime while the plan looks fine.
-- `aws_iam_role_policy`: inline policies whose combined size crosses the IAM limit fail apply.
-- `google_project_iam_member`: project-level `*.admin` roles, and bindings to the Default
-  Compute / App Engine service accounts.
+- An attribute that is `Optional + Computed`, so leaving it undeclared makes Terraform adopt
+  whatever the live value is instead of asserting one — and a change made outside Terraform
+  then produces no plan diff at all.
+- A provider or API default that differs by version or by neighbouring attribute, so omitting
+  the attribute does not mean what it meant last year.
+- A guard against destruction whose name is different on every resource type, so no
+  cross-provider check can enumerate them.
+- A grant whose blast radius is wider than its syntax suggests, because of where it is attached
+  rather than what it says.
 
-None of these are expressible as a generic check. All of them are expressible as
-"when you see this resource type, look at this."
+None of these is expressible as a generic, provider-neutral check. Every one of them is
+expressible as "when you see this resource type, look at this."
 
 Such knowledge cannot be assumed to live in PR line comments; many teams review by approval
 alone. PR descriptions and the diff itself are the dependable source, and the rule generation
@@ -104,16 +104,16 @@ checkpoints_for_resource:
         Is any of env, secret references, cpu, memory or service_account in changed_keys?
         Each creates a new revision, and with LATEST 100% serving the switch is immediate.
 
-  google_sql_database_instance:
-    - id: cloudsql-edition-tier-mismatch
-      aspect: destruction
-      severity: high
+  aws_db_instance:
+    - id: rds-guard-relaxed
+      aspect: data-loss
+      severity: critical
       references:
-        - https://cloud.google.com/sql/docs/postgres/editions-intro
+        - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_instance
       guidance: |
-        On create, is `edition` absent from `after` while `tier` is a shared-core type
-        (db-f1-micro, db-g1-small)? The API defaults newer Postgres versions to
-        ENTERPRISE_PLUS, which rejects shared-core tiers, and creation fails at apply.
+        Do `changed_keys` include deletion_protection moving to false, skip_final_snapshot
+        moving to true, or backup_retention_period dropping to 0? Name the attribute and both
+        values. A value that was already relaxed before this change does not count.
 ```
 
 ### Checkpoint fields
