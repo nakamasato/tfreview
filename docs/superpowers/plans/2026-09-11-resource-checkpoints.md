@@ -2268,11 +2268,53 @@ git commit -m "feat: add the tfreview-rules skill for generating checkpoints fro
 - Consumes: everything above.
 - Produces: documentation matching the shipped behaviour.
 
-- [ ] **Step 1: Update `README.md`**
+- [ ] **Step 1: Rewrite the opening of `README.md`**
 
-- Replace the "Plan-only review" bullet. The plan remains the only required input; the PR diff
-  and PR context are optional and, when supplied, are sent to the LLM. State plainly that the
-  plan's `before` still never leaves the runner but that HCL source does when `--diff` is used.
+The current `## Why tfreview` is an undifferentiated list of seven features and never says what
+problem any of them solves. Replace it with a short problem statement followed by the answers,
+and keep the whole opening under roughly 40 lines — the README's value is that a first-time
+reader understands the point before scrolling.
+
+Replace everything between the status blockquote and `## Quick start (GitHub Actions)` with:
+
+```markdown
+## The problem
+
+- **You write the same review comment every PR.** "Is this delete intentional?" "Does this
+  bucket need to be public?" The answer lives in one reviewer's head, gets typed out again next
+  week, and never becomes anything the team owns.
+- **Your review criteria never reach the AI.** Real review is not "deletes are bad". It is
+  whether a deletion has a reason, whether a drift-looking diff is drift, whether the attribute
+  being changed behaves the way the author thinks it does according to the provider's own
+  documentation. A generic reviewer has none of that context and cannot be told it.
+- **A general coding agent is the wrong shape for this.** Point one at a PR and you get a long
+  essay that costs real tokens, differs run to run, and leaves nothing behind — the next PR
+  starts from zero again.
+
+## How tfreview answers it
+
+- **Knowledge accumulates per resource type.** `checkpoints_for_resource` is where "for this
+  resource, look at this" goes. Add one when you catch something in review, and it is checked on
+  every future PR. The bundled `skills/tfreview-rules/` skill drafts them from your merged PR
+  history.
+- **Criteria are prose, and the config decides how much they matter.** A checkpoint says what to
+  look at in plain language, declares how bad it is for your team, and can carry the
+  documentation links it was derived from. The model returns the severity it judged for the
+  finding, with its reasoning.
+- **Cost stays bounded and predictable.** Only the checkpoints matching the resources a plan
+  actually touches reach the prompt, so a config with hundreds of them still costs one call per
+  target. Verdicts are cached by the hash of the inputs, so an unchanged target is never
+  re-judged.
+- **Plan-first, with the diff only when you ask.** The plan is the required input and its
+  `before` never leaves the runner. Pass `--diff` and `--pr-context` and tfreview can also see
+  suppression comments, `lifecycle` changes, and plan diffs the HCL does not explain.
+- **One comment, one label, and blocking is opt-in.** The comment is replaced in place, never
+  stacked; `tfreview:critical` on the PR list says where to look first. `--fail-on critical`
+  turns it into a required check. `tfreview fetch --pr N` reproduces the same verdict locally.
+```
+
+Then continue with the rest of the README:
+
 - Rewrite the Configuration section for `aspects`, `checkpoints_for_resource`, `severity`,
   `requires` and `references`, with the worked checkpoint example from Task 10.
 - Explain that a checkpoint's `severity` is declared and the LLM returns the judged severity,
