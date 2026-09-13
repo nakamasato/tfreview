@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/nakamasato/tfreview/compare/v0.1.0...v0.2.0) (2026-09-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* accumulate review knowledge per resource type ([#17](https://github.com/nakamasato/tfreview/issues/17))
+
+### Features
+
+* accumulate review knowledge per resource type ([#17](https://github.com/nakamasato/tfreview/issues/17)) ([f9628fd](https://github.com/nakamasato/tfreview/commit/f9628fdd3a84abdea1f1c25a45ae6aa30ed5282c))
+* add the tfreview-rules skill for generating checkpoints from PR history ([#20](https://github.com/nakamasato/tfreview/issues/20)) ([08f90ad](https://github.com/nakamasato/tfreview/commit/08f90ade7f5cd038edb1a35723ebc01334f593ef))
+* judge through the local claude CLI and score verdicts against fixtures ([#19](https://github.com/nakamasato/tfreview/issues/19)) ([c87de47](https://github.com/nakamasato/tfreview/commit/c87de474be397650bf780b4989b4ad931c7bece3))
+
 ## 0.1.0 (2026-09-04)
 
 
