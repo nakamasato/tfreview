@@ -1,0 +1,121 @@
+---
+name: tfreview-rules
+description: Use when creating or extending a repository's .tfreview.yaml from its own Terraform history — failed applies, reverts, fix-up PRs, PR descriptions — or when asked to add tfreview checkpoints for a resource type.
+allowed-tools: Bash, Read, Write, Edit, Grep, Glob, WebFetch, WebSearch
+---
+
+# tfreview-rules
+
+Turn what already went wrong (or was deliberately avoided) in a Terraform repository into
+`checkpoints_for_resource` entries that tfreview can judge from a plan.
+
+A checkpoint the plan cannot decide is worse than none: it returns `unverifiable` on every PR
+and teaches readers to ignore the comment. Most of this procedure exists to drop candidates.
+
+## Inputs tfreview gives the model
+
+Per resource: `type`, `actions`, `after` (end state; empty on delete), `changed_keys`
+(attributes whose value changed). Plan-wide: `counts`. Optionally the PR diff
+(`requires: [diff]`) and PR title/body (`requires: [pr]`). There is **no `before` value**.
+Every checkpoint must be answerable from these alone.
+
+## Procedure
+
+Select what to read by signal and by coverage of managed resource types, not by PR count —
+`references/selection-strategy.md` has the details.
+
+1. **Build the coverage map**: `scripts/managed-types.sh <root-dir>...` over the root modules
+   CI plans. When the request names resource types, keep only those rows. Failures found on a
+   neighbouring type (the attachment or policy resource of a requested one) become cards under
+   their own type, marked "neighbouring" in the report.
+2. **Rank PRs by signal**: `scripts/rank-prs.sh <owner/name>` — failed apply, reverts, fix-ups,
+   abandoned PRs, review threads, comment volume. Always pass `--repo <owner>/<name>` to `gh`.
+   A shell loop of `gh` calls can be refused or fail on TLS in a sandbox: put the loop in a
+   script file and run it with `bash`.
+3. **Read per type until saturated**: the top-ranked PRs touching the type (each with the PR it
+   fixes or reverts), then guards in the current code, then the provider resource page at the
+   pinned version. Stop reading PRs for a type after two in a row add no card.
+4. **Write one candidate card per failure mode**, grouped by resource type:
+   `type · what happens · plan-visible trigger (attribute + value) · evidence (PRs, or doc URL)`.
+5. **Run every card through the gates** in `references/extraction-criteria.md`. Record each
+   dropped card with the gate that dropped it.
+6. **Confirm the mechanism in a primary source** (provider resource docs, cloud API docs,
+   provider issue tracker) with WebFetch. A PR author's explanation is not a source. No source
+   → the guidance states only the plan-visible condition, with no claim about why. The current
+   source contradicts the failure (the documented limit or default no longer holds for the
+   provider version the repository pins) → drop the card. A doc that only shows the pattern in
+   an example, without a reason, confirms the condition but not a mechanism.
+7. **Write the checkpoints** with `references/writing-checkpoints.md`.
+8. **Fold them into `.tfreview.yaml`** with `references/merging.md`.
+9. **Validate** (below).
+10. **Report and ask for approval** (below). Write the file only after approval.
+
+## Validate
+
+Schema — any extracted plan works, the mock provider needs no API key:
+
+```bash
+tfreview extract --show-json <any terraform show -json output> --target t --out /tmp/t.json
+TFREVIEW_ALLOW_MOCK=1 tfreview review --provider mock --config .tfreview.yaml \
+  --plan /tmp/t.json --out-dir /tmp/tfreview-out
+```
+
+Decidability — for each checkpoint whose source PR still has a plan artifact. `review` does
+not judge `checkpoints_for_resource` yet, so check the plan directly: the trigger the guidance
+asks about must be visible in the source PR's plan.
+
+```bash
+rm -rf /tmp/tfreview-plans && tfreview fetch --pr <n> --repo <owner>/<name> --out-dir /tmp/tfreview-plans
+jq -c --arg t <resource_type> \
+  '.resources[] | select(.type == $t) | {address, actions, changed_keys, after}' \
+  /tmp/tfreview-plans/*.json
+```
+
+The checkpoint is **verified** only if a resource of its type is there and the attribute or
+action its guidance names shows up in `actions`, `changed_keys`, or `after`. If it does not,
+rewrite the checkpoint to ask only about what that plan shows, or drop it. A checkpoint with
+`requires: [diff]` or `[pr]` depends on input a plan lacks: verify the plan-visible part and
+say which input the rest needs. If `fetch` finds no artifact, check why before
+giving up — `fetch` reports an expired artifact the same way as a missing one, and artifact
+retention can be much shorter than the PR history:
+
+```bash
+gh api "repos/<owner>/<name>/actions/artifacts?per_page=100" \
+  --jq '.artifacts[] | [.name, .expired, .created_at] | @tsv'
+```
+
+Expired, absent, or only a binary plan → mark the checkpoint **unverified** in the report.
+Never report it as verified because the schema passed.
+
+## Report
+
+Show this before writing, then the YAML diff:
+
+| checkpoint | type | aspect / severity | evidence: history (PRs) / docs | trigger in plan | doc URL or "none" | verified / unverified |
+| --- | --- | --- | --- | --- | --- | --- |
+
+Followed by:
+
+- the dropped cards: `card · gate that dropped it`;
+- proposed edits to generic checks (from gate 5), one line each;
+- the coverage table, one row per type in the coverage map:
+
+| type | declared | PRs read | checkpoints | dropped cards | docs read (version) |
+| --- | --- | --- | --- | --- | --- |
+
+A type with no checkpoint is a result, not a gap, as long as its PRs and docs were read.
+
+When no card survives, report the table empty with the dropped cards, and write no YAML:
+a config with no checkpoints judges exactly like no config.
+
+## Common mistakes
+
+| Mistake | Instead |
+| --- | --- |
+| Keeping a card because it "might" be decidable, with a note saying so | A card that fails a gate is dropped; the note goes in the dropped list |
+| Rule for a resource type the repo no longer declares, or for a failure that never happened and no doc states | Gate 1 and gate 2 |
+| A docs card that restates a best practice | Only a stated consequence of a specific attribute value counts |
+| Guidance that explains the incident, the fix, or "in this repository…" | Guidance is the question the model answers about this plan |
+| Mechanism copied from the PR body into guidance | Confirm it in a primary source, or state only the condition |
+| Copying `aspects` from memory or from an old example | Copy from the installed version's `internal/config/default.yaml`, see `references/merging.md` |
+| "Validated" meaning the mock run exited 0 | Schema passing says nothing about whether a checkpoint can hit |
