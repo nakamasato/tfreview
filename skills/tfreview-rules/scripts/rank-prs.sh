@@ -40,11 +40,20 @@ query($owner: String!, $name: String!, $endCursor: String) {
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-# --paginate walks every page; stop reading once max PRs are collected.
-gh api graphql --paginate -f owner="$owner" -f name="$name" -f query="$query" \
-  --jq '.data.repository.pullRequests.nodes[]' | head -n "$max" > "$tmp"
+# Paged by hand instead of `--paginate | head`: head exiting early breaks gh's pipe (pipefail
+# aborts the script), and --paginate would fetch the whole PR history before stopping.
+cursor=()
+while :; do
+  page="$(gh api graphql -f owner="$owner" -f name="$name" -f query="$query" ${cursor[@]+"${cursor[@]}"} \
+    --jq '.data.repository.pullRequests')"
+  jq -c '.nodes[]' <<<"$page" >> "$tmp"
+  if [ "$(wc -l < "$tmp")" -ge "$max" ] || [ "$(jq -r '.pageInfo.hasNextPage' <<<"$page")" != true ]; then
+    break
+  fi
+  cursor=(-f endCursor="$(jq -r '.pageInfo.endCursor' <<<"$page")")
+done
 
-jq -r --arg re "$apply_re" '
+head -n "$max" "$tmp" | jq -r --arg re "$apply_re" '
   def bot: (.author.login // "") | test("\\[bot\\]$|^renovate|^dependabot"; "i");
   ([.mergeCommit.checkSuites.nodes[]?.checkRuns.nodes[]?
      | select(.name | test($re; "i")) | .conclusion] | any(. == "FAILURE")) as $apply_failed
@@ -66,4 +75,4 @@ jq -r --arg re "$apply_re" '
       (.author.login // "-"), .title,
       ([.files.nodes[].path | split("/") | .[0:2] | join("/")] | unique | join(","))
     ] | @tsv
-' "$tmp" | sort -t$'\t' -k1,1nr -k2,2nr
+' | sort -t$'\t' -k1,1nr -k2,2nr

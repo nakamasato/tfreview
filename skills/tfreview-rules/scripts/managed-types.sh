@@ -23,10 +23,14 @@ walk() {
   # shellcheck disable=SC2086
   grep -hoE '^resource "[a-z0-9_]+"' $files \
     | awk -v r="$root" '{ gsub(/^resource "|"$/, ""); print $0 "\t" r }' || true
+  # Only `source` inside a module block: provisioners and object resources also have a
+  # `source` path, and following those would count types CI never plans. Line-anchored so
+  # commented-out blocks are skipped.
   # shellcheck disable=SC2086
-  # Anchored at line start so commented-out module blocks are not followed.
-  { grep -hoE '^[[:space:]]*source[[:space:]]*=[[:space:]]*"\.\.?/[^"]+"' $files || true; } \
-    | sed -E 's/.*"(.*)"/\1/' | sort -u \
+  awk '/^module[[:space:]]+"/ { m = 1 } /^}/ { m = 0 }
+       m && match($0, /^[[:space:]]*source[[:space:]]*=[[:space:]]*"\.\.?\/[^"]+"/) {
+         s = substr($0, RSTART, RLENGTH); sub(/^[^"]*"/, "", s); sub(/"$/, "", s); print s }' $files \
+    | sort -u \
     | while read -r rel; do
         local child
         child="$(cd "$dir" && cd "$rel" 2>/dev/null && pwd)" || continue

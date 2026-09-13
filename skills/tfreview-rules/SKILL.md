@@ -60,15 +60,22 @@ TFREVIEW_ALLOW_MOCK=1 tfreview review --provider mock --config .tfreview.yaml \
   --plan /tmp/t.json --out-dir /tmp/tfreview-out
 ```
 
-Decidability — for each checkpoint whose source PR still has a plan artifact:
+Decidability — for each checkpoint whose source PR still has a plan artifact. `review` does
+not judge `checkpoints_for_resource` yet, so check the plan directly: the trigger the guidance
+asks about must be visible in the source PR's plan.
 
 ```bash
-tfreview fetch --pr <n> --repo <owner>/<name> --out-dir /tmp/tfreview-plans
-tfreview review --plan /tmp/tfreview-plans/*.json --config .tfreview.yaml --out-dir /tmp/tfreview-out
+rm -rf /tmp/tfreview-plans && tfreview fetch --pr <n> --repo <owner>/<name> --out-dir /tmp/tfreview-plans
+jq -c --arg t <resource_type> \
+  '.resources[] | select(.type == $t) | {address, actions, changed_keys, after}' \
+  /tmp/tfreview-plans/*.json
 ```
 
-The checkpoint must be `hit` in `/tmp/tfreview-out/result.json`. If it is not, rewrite it to
-ask only about what that plan shows, or drop it. If `fetch` finds no artifact, check why before
+The checkpoint is **verified** only if a resource of its type is there and the attribute or
+action its guidance names shows up in `actions`, `changed_keys`, or `after`. If it does not,
+rewrite the checkpoint to ask only about what that plan shows, or drop it. A checkpoint with
+`requires: [diff]` or `[pr]` depends on input a plan lacks: verify the plan-visible part and
+say which input the rest needs. If `fetch` finds no artifact, check why before
 giving up — `fetch` reports an expired artifact the same way as a missing one, and artifact
 retention can be much shorter than the PR history:
 
@@ -84,7 +91,7 @@ Never report it as verified because the schema passed.
 
 Show this before writing, then the YAML diff:
 
-| checkpoint | type | aspect / severity | evidence: history (PRs) / docs | trigger in plan | doc URL or "none" | verified: hit / unverified |
+| checkpoint | type | aspect / severity | evidence: history (PRs) / docs | trigger in plan | doc URL or "none" | verified / unverified |
 | --- | --- | --- | --- | --- | --- | --- |
 
 Followed by:
