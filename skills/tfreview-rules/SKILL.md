@@ -21,27 +21,22 @@ Every checkpoint must be answerable from these alone.
 
 ## Procedure
 
-1. **Inventory resource types still in use.** Only these can get checkpoints.
-   ```bash
-   grep -rhoE '^resource "[a-z0-9_]+"' --include='*.tf' --exclude-dir=.terraform \
-     --exclude-dir=.git --exclude-dir=.claude . | sort | uniq -c | sort -rn
-   ```
-   When the request names resource types, find the files that declare them and list the PRs
-   that touched those files; step 2 then runs over that list only.
-   ```bash
-   grep -rlE '^resource "<type>"' --include='*.tf' --exclude-dir=.terraform --exclude-dir=.git \
-     --exclude-dir=.claude . | xargs git log --oneline --
-   ```
-   Failures found on a neighbouring type (the attachment or policy resource of the
-   requested one) become cards under their own type, marked "neighbouring" in the report.
-2. **Collect failure signals before reading anything in depth.** See
-   `references/extraction-criteria.md` § Sources for the list and the commands. Always pass
-   `--repo <owner>/<name>` to `gh`. A shell loop of `gh` calls can be refused or fail on TLS in
-   a sandbox: put the loop in a script file and run it with `bash`.
-3. **Read each signalled PR together with the PR it fixes or reverts** — body, diff, and bot
-   comments carrying plan/apply output. Human review comments are often absent.
+Select what to read by signal and by coverage of managed resource types, not by PR count —
+`references/selection-strategy.md` has the details.
+
+1. **Build the coverage map**: `scripts/managed-types.sh <root-dir>...` over the root modules
+   CI plans. When the request names resource types, keep only those rows. Failures found on a
+   neighbouring type (the attachment or policy resource of a requested one) become cards under
+   their own type, marked "neighbouring" in the report.
+2. **Rank PRs by signal**: `scripts/rank-prs.sh <owner/name>` — failed apply, reverts, fix-ups,
+   abandoned PRs, review threads, comment volume. Always pass `--repo <owner>/<name>` to `gh`.
+   A shell loop of `gh` calls can be refused or fail on TLS in a sandbox: put the loop in a
+   script file and run it with `bash`.
+3. **Read per type until saturated**: the top-ranked PRs touching the type (each with the PR it
+   fixes or reverts), then guards in the current code, then the provider resource page at the
+   pinned version. Stop reading PRs for a type after two in a row add no card.
 4. **Write one candidate card per failure mode**, grouped by resource type:
-   `type · what happened · plan-visible trigger (attribute + value) · evidence PRs`.
+   `type · what happens · plan-visible trigger (attribute + value) · evidence (PRs, or doc URL)`.
 5. **Run every card through the gates** in `references/extraction-criteria.md`. Record each
    dropped card with the gate that dropped it.
 6. **Confirm the mechanism in a primary source** (provider resource docs, cloud API docs,
@@ -89,10 +84,19 @@ Never report it as verified because the schema passed.
 
 Show this before writing, then the YAML diff:
 
-| checkpoint | type | aspect / severity | evidence PRs | trigger in plan | doc URL or "none" | verified: hit / unverified |
+| checkpoint | type | aspect / severity | evidence: history (PRs) / docs | trigger in plan | doc URL or "none" | verified: hit / unverified |
 | --- | --- | --- | --- | --- | --- | --- |
 
-Followed by the dropped cards: `card · gate that dropped it`.
+Followed by:
+
+- the dropped cards: `card · gate that dropped it`;
+- proposed edits to generic checks (from gate 5), one line each;
+- the coverage table, one row per type in the coverage map:
+
+| type | declared | PRs read | checkpoints | dropped cards | docs read (version) |
+| --- | --- | --- | --- | --- | --- |
+
+A type with no checkpoint is a result, not a gap, as long as its PRs and docs were read.
 
 When no card survives, report the table empty with the dropped cards, and write no YAML:
 a config with no checkpoints judges exactly like no config.
@@ -102,7 +106,8 @@ a config with no checkpoints judges exactly like no config.
 | Mistake | Instead |
 | --- | --- |
 | Keeping a card because it "might" be decidable, with a note saying so | A card that fails a gate is dropped; the note goes in the dropped list |
-| Rule for a resource type the repo no longer declares, or for a failure that never happened | Gate 1 and gate 2 |
+| Rule for a resource type the repo no longer declares, or for a failure that never happened and no doc states | Gate 1 and gate 2 |
+| A docs card that restates a best practice | Only a stated consequence of a specific attribute value counts |
 | Guidance that explains the incident, the fix, or "in this repository…" | Guidance is the question the model answers about this plan |
 | Mechanism copied from the PR body into guidance | Confirm it in a primary source, or state only the condition |
 | Copying `aspects` from memory or from an old example | Copy from the installed version's `internal/config/default.yaml`, see `references/merging.md` |
