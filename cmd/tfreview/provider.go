@@ -8,6 +8,7 @@ import (
 	"github.com/nakamasato/tfreview/internal/config"
 	"github.com/nakamasato/tfreview/internal/llm"
 	"github.com/nakamasato/tfreview/internal/llm/anthropic"
+	"github.com/nakamasato/tfreview/internal/llm/claudecli"
 	"github.com/nakamasato/tfreview/internal/llm/mock"
 	"github.com/nakamasato/tfreview/internal/model"
 )
@@ -16,6 +17,8 @@ func newProvider(cfg *config.Config) (llm.Provider, error) {
 	switch cfg.LLM.Provider {
 	case "anthropic":
 		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, MaxTokens: cfg.LLM.MaxTokens, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
+	case "claude-cli":
+		return claudecli.New(claudecli.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars}), nil
 	case "mock":
 		// mock returns fixed verdicts without calling any LLM; gating it behind an
 		// explicit opt-in keeps a config typo (or a copied test config) from

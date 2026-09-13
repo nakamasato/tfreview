@@ -32,6 +32,9 @@ func newReviewCmd() *cobra.Command {
 		repo       string
 		failOn     string
 		ruleOnly   bool
+		provider   string
+		llmModel   string
+		printOut   string
 	)
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -49,6 +52,12 @@ func newReviewCmd() *cobra.Command {
 			cfg, err := loadConfig(configPath)
 			if err != nil {
 				return err
+			}
+			if provider != "" {
+				cfg.LLM.Provider = provider
+			}
+			if llmModel != "" {
+				cfg.LLM.Model = llmModel
 			}
 			var ps []*plan.Plan
 			for _, path := range plans {
@@ -101,6 +110,15 @@ func newReviewCmd() *cobra.Command {
 			if err := out.State.Save(filepath.Join(outDir, "state.json")); err != nil {
 				return err
 			}
+			switch printOut {
+			case "":
+			case "debug":
+				cmd.Println(render.Debug(result, ps, render.ColorEnabled()))
+			case "comment":
+				cmd.Println(render.Comment(result))
+			default:
+				return &exitError{code: 2, msg: "--print: unknown format " + printOut + " (debug|comment)"}
+			}
 			cmd.Printf("%s (%s)\n", result.Label, outDir)
 			if result.Incomplete {
 				for _, line := range skippedSummaryLines(result) {
@@ -142,6 +160,9 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&repo, "repo", "", "owner/name, used only for links (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit 1 when the score reaches this level (medium|high|critical)")
 	cmd.Flags().BoolVar(&ruleOnly, "fail-on-rule-only", false, "with --fail-on, count only deterministic (match) verdicts")
+	cmd.Flags().StringVar(&provider, "provider", "", "override llm.provider (anthropic|claude-cli|mock)")
+	cmd.Flags().StringVar(&llmModel, "model", "", "override llm.model")
+	cmd.Flags().StringVar(&printOut, "print", "", "also write the result to stdout (debug|comment)")
 	return cmd
 }
 
