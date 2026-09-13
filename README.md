@@ -91,6 +91,15 @@ Without `ANTHROPIC_API_KEY` set, `review` still runs, prints a warning to
 stderr, and labels the result `tfreview:unknown` since no LLM checks could be
 judged.
 
+`--print debug` writes a coloured, terminal-oriented view of the run to stdout:
+the plan attributes each check was given, then the verdicts with hits first and
+misses collapsed to one line. `--provider` / `--model` override `llm.provider` /
+`llm.model` for a one-off run.
+
+`--provider claude-cli` judges through the local `claude` CLI instead of the
+API, so it needs no `ANTHROPIC_API_KEY` and is billed to the Claude
+subscription. It is for local iteration only — CI has no `claude` CLI.
+
 `--fail-on-rule-only` narrows `--fail-on` to verdicts a `match` decided
 (deterministic checks, or an `ask` check that fell back to its match result
 because the LLM didn't answer) — an LLM `hit` alone won't fail the build.
@@ -109,7 +118,7 @@ tests only) additionally requires the environment variable
 ```yaml
 language: en                 # default en. Language of the fixed comment text and LLM instructions
 llm:
-  provider: anthropic        # anthropic only, for now
+  provider: anthropic        # anthropic | claude-cli (the local `claude` CLI, no API key) | mock
   model: claude-opus-5
   max_plan_chars: 100000     # skip the LLM call and mark every check unverifiable above this size
   max_tokens: 128000         # max_tokens for the judging call; lower it only for a model with a smaller output cap
@@ -202,6 +211,22 @@ that target's (reduced) plan JSON plus the config. A push that doesn't change
 a target's plan or the config reuses its cached verdicts instead of calling
 the LLM again. `skipped` targets are never written to state, so a transient
 LLM failure doesn't get pinned for the life of the PR — the next run retries it.
+
+## Evaluating judgement quality
+
+`eval/cases/*.json` are labelled plan fixtures; `eval/eval_test.go` judges each
+one and scores the verdicts against the labels. A case lists only the checks
+expected to be anything other than `miss`, so a false positive on any other
+check fails it too.
+
+```
+TFREVIEW_EVAL=1 go test ./eval -v -count=1 -timeout 20m
+```
+
+It calls a real LLM, so it is skipped unless `TFREVIEW_EVAL=1` is set, and
+`-count=1` is required or Go serves a cached result instead of re-judging.
+`TFREVIEW_EVAL_MODEL` overrides the model. Only disagreements are printed,
+followed by the accuracy, token counts and cost.
 
 ## Limitations
 

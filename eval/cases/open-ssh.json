@@ -1,0 +1,21 @@
+{
+  "target": "prd",
+  "counts": { "add": 1 },
+  "resources": [
+    {
+      "address": "aws_security_group_rule.bastion_ssh",
+      "type": "aws_security_group_rule",
+      "name": "bastion_ssh",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "actions": ["create"],
+      "after": {
+        "type": "ingress",
+        "from_port": 22,
+        "to_port": 22,
+        "protocol": "tcp",
+        "cidr_blocks": ["0.0.0.0/0"],
+        "security_group_id": "sg-0a1b2c3d"
+      }
+    }
+  ]
+}

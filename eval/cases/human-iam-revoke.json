@@ -1,0 +1,19 @@
+{
+  "target": "prd",
+  "counts": { "change": 1 },
+  "resources": [
+    {
+      "address": "google_project_iam_binding.viewer",
+      "type": "google_project_iam_binding",
+      "name": "viewer",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "actions": ["update"],
+      "after": {
+        "project": "acme-widgets",
+        "role": "roles/viewer",
+        "members": ["user:alice@example.com"]
+      },
+      "changed_keys": ["members"]
+    }
+  ]
+}

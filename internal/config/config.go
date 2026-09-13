@@ -112,8 +112,8 @@ func Parse(raw []byte) (*Config, error) {
 	if c.LLM.Provider == "" {
 		c.LLM.Provider = "anthropic"
 	}
-	if c.LLM.Provider != "anthropic" && c.LLM.Provider != "mock" {
-		return nil, errorf("llm.provider %q is not supported (anthropic|mock)", c.LLM.Provider)
+	if c.LLM.Provider != "anthropic" && c.LLM.Provider != "claude-cli" && c.LLM.Provider != "mock" {
+		return nil, errorf("llm.provider %q is not supported (anthropic|claude-cli|mock)", c.LLM.Provider)
 	}
 	if c.LLM.Model == "" {
 		c.LLM.Model = "claude-opus-5"

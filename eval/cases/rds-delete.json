@@ -1,0 +1,14 @@
+{
+  "target": "prd",
+  "counts": { "destroy": 1 },
+  "resources": [
+    {
+      "address": "aws_db_instance.orders",
+      "type": "aws_db_instance",
+      "name": "orders",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "actions": ["delete"],
+      "after": null
+    }
+  ]
+}
