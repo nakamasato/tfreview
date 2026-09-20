@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 )
 
 type showJSON struct {
@@ -14,6 +15,7 @@ type showJSON struct {
 		Type          string `json:"type"`
 		Name          string `json:"name"`
 		ProviderName  string `json:"provider_name"`
+		ActionReason  string `json:"action_reason"`
 		Change        struct {
 			Actions        []string        `json:"actions"`
 			Before         map[string]any  `json:"before"`
@@ -21,6 +23,7 @@ type showJSON struct {
 			AfterSensitive json.RawMessage `json:"after_sensitive"`
 			AfterUnknown   json.RawMessage `json:"after_unknown"`
 			Importing      json.RawMessage `json:"importing"`
+			ReplacePaths   [][]any         `json:"replace_paths"`
 		} `json:"change"`
 	} `json:"resource_changes"`
 }
@@ -33,7 +36,7 @@ func Extract(raw []byte, target string) (*Plan, error) {
 	p := &Plan{Target: target, Resources: []Resource{}}
 	for _, rc := range show.ResourceChanges {
 		importing := len(rc.Change.Importing) > 0 && string(rc.Change.Importing) != "null"
-		kind := classify(rc.Change.Actions)
+		kind := Kind(rc.Change.Actions)
 		// no-op/read are ordinarily dropped as noise, but a no-op/read paired with
 		// `importing` is terraform adopting an existing resource into state — a
 		// real event worth keeping even though nothing about the resource changes.
@@ -60,6 +63,8 @@ func Extract(raw []byte, target string) (*Plan, error) {
 			ModuleAddress: rc.ModuleAddress,
 			ProviderName:  rc.ProviderName,
 			Actions:       rc.Change.Actions,
+			ActionReason:  rc.ActionReason,
+			ReplacePaths:  replacePaths(rc.Change.ReplacePaths),
 			After:         stripSensitive(rc.Change.After, rc.Change.AfterSensitive),
 		}
 		if kind == "change" || kind == "replace" {
@@ -71,7 +76,24 @@ func Extract(raw []byte, target string) (*Plan, error) {
 	return p, nil
 }
 
-func classify(actions []string) string {
+// replace_paths is a list of attribute paths, each itself a list whose elements are
+// attribute names or list indices. They are flattened to dotted strings because every
+// consumer only ever shows them or hands them to a judge.
+func replacePaths(paths [][]any) []string {
+	var out []string
+	for _, p := range paths {
+		parts := make([]string, 0, len(p))
+		for _, step := range p {
+			parts = append(parts, fmt.Sprint(step))
+		}
+		out = append(out, strings.Join(parts, "."))
+	}
+	return out
+}
+
+// Kind maps a change's actions onto the counter it belongs to. It returns "" for
+// no-op and read, which are not changes.
+func Kind(actions []string) string {
 	switch {
 	case len(actions) == 2:
 		return "replace"

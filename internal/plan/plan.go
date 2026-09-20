@@ -23,6 +23,8 @@ type Resource struct {
 	ModuleAddress string         `json:"module_address"`
 	ProviderName  string         `json:"provider_name"`
 	Actions       []string       `json:"actions"`
+	ActionReason  string         `json:"action_reason,omitempty"`
+	ReplacePaths  []string       `json:"replace_paths,omitempty"`
 	After         map[string]any `json:"after"`
 	ChangedKeys   []string       `json:"changed_keys,omitempty"`
 	UnknownKeys   []string       `json:"unknown_keys,omitempty"`
