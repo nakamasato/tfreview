@@ -6,3 +6,7 @@
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
+
+# local-only env files (.env.example is committed)
+.env
+.envrc
