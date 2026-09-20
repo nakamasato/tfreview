@@ -16,7 +16,7 @@ the verdict you get on your laptop.
   walks your repository, so verdicts are stable and each target costs one API call.
 - **Your criteria, in YAML.** What counts as dangerous lives in `.tfreview.yaml`.
   Deterministic checks (`match`) and LLM checks (`question`) combine into four
-  check types; the config decides the level, the LLM only says hit / miss.
+  check types; the config decides the severity, the LLM only says hit / miss.
 - **Incremental.** Verdicts are cached per target by the hash of plan + config. A
   push that does not change a target's plan re-uses its verdicts: no drift, no
   extra cost.
@@ -127,23 +127,34 @@ llm:
     cache_write: 6.25
     cache_read: 0.50
     output: 25.00
-categories:
+  jev:                       # the scoring judge; see Scored checks below
+    model: jev-latest
+    hit_threshold: 0.70      # a score at or above this is a hit
+    miss_threshold: 0.30     # at or below is a miss; the band between is undecided
+    max_value_chars: 2000    # shorten long individual attribute values
+    concurrency: 4           # scored checks in flight at once
+aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
       - id: delete-or-replace
-        level: critical                    # none < medium < high < critical
+        severity: critical                 # none < medium < high < critical
         match: { actions: [delete] }       # actions / types / targets only, each a list of strings
         verdict_on_match: ask              # hit (default) / ask / unverifiable
         question: |
           Is a running resource deleted or replaced? ...
+        instructions: |                    # the same check, for a judge that scores
+          The change at `focus` deletes or replaces a resource that serves traffic.
+        criteria:
+          true: the action is delete or replace, and the resource serves requests
+          false: the action is create or update, or the resource serves nothing
 ```
 
-- If `categories` is omitted, the built-in defaults are used. If present, it
+- If `aspects` is omitted, the built-in defaults are used. If present, it
   replaces them entirely — there is no merge.
-- `id` must be unique within categories and within checks. A duplicate id, an
-  invalid `level`, an unknown `match` key, or a check with neither `match` nor
-  `question` is a config error (`review` exits 2).
+- `id` must be unique within aspects and within checks. A duplicate id, an
+  invalid `severity`, an unknown `match` key, or a check with none of `match`,
+  `question` or `instructions` is a config error (`review` exits 2).
 - The config's SHA-256 is mixed into the digest used to key incremental state.
 
 ### Check types
@@ -155,13 +166,28 @@ categories:
 | B′. Fact + interpretation | `match` + `question` + `verdict_on_match: ask` | What changed is deterministic; whether it is dangerous needs judgment | Used. If no answer comes back, the match result stands |
 | C. Unverifiable | `match` + `verdict_on_match: unverifiable` | The plan cannot show this in principle | Not used. Reports "unverifiable by plan" |
 
-`level` is always decided by the config. The LLM only returns hit / miss and a reason.
+`severity` is always decided by the config. The LLM only returns hit / miss and a reason.
 
-### Levels
+### Scored checks
+
+`question` is addressed to a judge that answers in prose. `instructions` states
+the same check as a proposition for a judge that scores it — TypeSafe AI's System
+One (Jev) returns a probability and no text — and `criteria` says what puts the
+proposition on each side. A check can carry both; which one is used depends on
+the judge. Scoring is configurable but not yet selectable from `llm.provider`.
+
+A score becomes a verdict by `llm.jev.hit_threshold` and `miss_threshold`, so an
+exception has to be written into `criteria` rather than left to the judge's
+discretion — a probability has nowhere to record a caveat. A question referring
+to `focus` is aimed at the change being judged. The defaults are the band the
+API documentation uses in its examples; they are a starting point for
+`eval/`, not a calibrated recommendation.
+
+### Severities
 
 The axes are recoverability and production impact.
 
-| Level | Criterion |
+| Severity | Criterion |
 | --- | --- |
 | `critical` | Cannot be undone, or takes production down |
 | `high` | Can be undone, but damage can go unnoticed for a while |
@@ -170,9 +196,9 @@ The axes are recoverability and production impact.
 
 ### Built-in default checks
 
-Provider-neutral, used when `.tfreview.yaml` has no `categories`.
+Provider-neutral, used when `.tfreview.yaml` has no `aspects`.
 
-| Category | Check | Type | Level |
+| Aspect | Check | Type | Severity |
 | --- | --- | --- | --- |
 | destruction | delete-or-replace | B′ (`actions: [delete]` + ask) | critical |
 | data-loss | stateful-delete | A (`actions: [delete]` + major DB/storage types) | critical |
@@ -198,13 +224,13 @@ comment text and LLM instructions in Japanese instead of English.
 4. `ask` fallback: if any target's answer for a check came back missing, the
    whole check reverts to what `match` alone decided, so a real `miss` can't
    be pushed aside by another target's `skipped`.
-5. Scores aggregate by max: a category scores the max of its checks, the PR
-   scores the max of its categories.
+5. Scores aggregate by max: an aspect scores the max of its checks, the PR
+   scores the max of its aspects.
 
 If the LLM call fails, times out, or returns something that can't be parsed,
 every check for that target becomes `skipped` — the process never crashes.
 When any check is `skipped`, the comment says the verdict is incomplete and
-the label is `tfreview:unknown` instead of a level.
+the label is `tfreview:unknown` instead of a severity.
 
 Incremental state (`state.json`) keys verdicts by target, under the SHA-256 of
 that target's (reduced) plan JSON plus the config. A push that doesn't change

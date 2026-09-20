@@ -92,13 +92,26 @@ const (
 
 func HasRequirement(reqs []string, req string) bool { return slices.Contains(reqs, req) }
 
+// Criteria bounds a proposition by saying what puts it on each side. It exists because
+// a probability-only judge has nowhere to record an exception it noticed, so every
+// exclusion has to be stated up front instead of left to the judge's discretion.
+type Criteria struct {
+	True  string
+	False string
+}
+
 type Check struct {
 	ID       string
 	Severity Severity
 	Match    Match
 	OnMatch  OnMatch
+	// Question is prose addressed to a judge that answers in prose.
 	Question string
-	Requires []string
+	// Instructions is the same check as a proposition a judge can only agree or
+	// disagree with, scored rather than answered.
+	Instructions string
+	Criteria     *Criteria
+	Requires     []string
 }
 
 type Aspect struct {

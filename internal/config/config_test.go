@@ -191,6 +191,26 @@ func TestParseRejects(t *testing.T) {
 			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        requires: [repo]\n        question: q\n",
 			want: "unknown requires",
 		},
+		"criteria without instructions": {
+			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        criteria: { true: t }\n",
+			want: "criteria bounds instructions",
+		},
+		"instructions with verdict_on_match hit": {
+			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        match: { actions: [delete] }\n        instructions: p\n",
+			want: "have no effect with verdict_on_match",
+		},
+		"jev miss above hit": {
+			yaml: "llm:\n  jev:\n    hit_threshold: 0.4\n    miss_threshold: 0.6\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        question: q\n",
+			want: "must not be above hit_threshold",
+		},
+		"jev hit threshold at 1": {
+			yaml: "llm:\n  jev:\n    hit_threshold: 1\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        question: q\n",
+			want: "thresholds must be within",
+		},
+		"jev concurrency below one": {
+			yaml: "llm:\n  jev:\n    concurrency: -1\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        question: q\n",
+			want: "concurrency must be at least 1",
+		},
 		"non-url reference": {
 			yaml: "aspects:\n  - id: a\ncheckpoints_for_resource:\n  aws_db_instance:\n    - id: x\n      aspect: a\n      severity: high\n      guidance: g\n      references: [not-a-url]\n",
 			want: "must be an http(s) URL",
@@ -218,4 +238,38 @@ func TestParseRequires(t *testing.T) {
 	if !model.HasRequirement(ck.Requires, model.RequiresDiff) || !model.HasRequirement(ck.Requires, model.RequiresPR) {
 		t.Errorf("Requires = %v", ck.Requires)
 	}
+}
+
+func TestParseJevDefaults(t *testing.T) {
+	c, err := Parse([]byte(minimal))
+	require.NoError(t, err)
+	require.Equal(t, Jev{Model: "jev-latest", HitThreshold: 0.70, MissThreshold: 0.30, MaxValueChars: 2000, Concurrency: 4}, c.LLM.Jev)
+}
+
+func TestParseJevOverrides(t *testing.T) {
+	c, err := Parse([]byte("llm:\n  jev:\n    model: jev-1.13.0\n    hit_threshold: 0.8\n    miss_threshold: 0.2\n    max_value_chars: 500\n    concurrency: 8\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        question: q\n"))
+	require.NoError(t, err)
+	require.Equal(t, Jev{Model: "jev-1.13.0", HitThreshold: 0.8, MissThreshold: 0.2, MaxValueChars: 500, Concurrency: 8}, c.LLM.Jev)
+}
+
+func TestParseInstructionsAndCriteria(t *testing.T) {
+	c, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: The change deletes a database.\n        criteria:\n          true: the action is delete\n          false: the action is create\n"))
+	require.NoError(t, err)
+	ck, ok := c.Check("c")
+	require.True(t, ok)
+	require.Equal(t, "The change deletes a database.", ck.Instructions)
+	require.Empty(t, ck.Question)
+	require.Equal(t, &model.Criteria{True: "the action is delete", False: "the action is create"}, ck.Criteria)
+}
+
+func TestParseCriteriaRejectsUnknownKey(t *testing.T) {
+	_, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: p\n        criteria: { maybe: m }\n"))
+	require.ErrorContains(t, err, `unknown criteria key "maybe"`)
+}
+
+func TestParseCriteriaAcceptsQuotedKeys(t *testing.T) {
+	c, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: p\n        criteria:\n          \"true\": t\n"))
+	require.NoError(t, err)
+	ck, _ := c.Check("c")
+	require.Equal(t, &model.Criteria{True: "t"}, ck.Criteria)
 }

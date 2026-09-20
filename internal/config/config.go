@@ -33,6 +33,19 @@ type LLM struct {
 	MaxInputChars int                `yaml:"max_input_chars"`
 	MaxTokens     int                `yaml:"max_tokens"`
 	Pricing       map[string]float64 `yaml:"pricing"`
+	Jev           Jev                `yaml:"jev"`
+}
+
+// Jev configures the scoring judge. Its thresholds turn a probability into a verdict:
+// at or above HitThreshold is a hit, at or below MissThreshold a miss, and the band
+// between them is undecided, which is what escalates a check to the next stage.
+type Jev struct {
+	Model         string  `yaml:"model"`
+	HitThreshold  float64 `yaml:"hit_threshold"`
+	MissThreshold float64 `yaml:"miss_threshold"`
+	// MaxValueChars shortens long individual attribute values. Keys are never dropped.
+	MaxValueChars int `yaml:"max_value_chars"`
+	Concurrency   int `yaml:"concurrency"`
 }
 
 type Config struct {
@@ -50,7 +63,12 @@ type rawCheck struct {
 	Match          map[string]any `yaml:"match"`
 	VerdictOnMatch string         `yaml:"verdict_on_match"`
 	Question       string         `yaml:"question"`
-	Requires       []string       `yaml:"requires"`
+	Instructions   string         `yaml:"instructions"`
+	// A map rather than a struct because YAML reads a bare `true:` as a boolean key,
+	// which no struct field can be named after. Decoding into a string-keyed map
+	// accepts both `true:` and `"true":`.
+	Criteria map[string]string `yaml:"criteria"`
+	Requires []string          `yaml:"requires"`
 }
 
 type rawAspect struct {
@@ -133,6 +151,9 @@ func Parse(raw []byte) (*Config, error) {
 	if c.LLM.MaxTokens == 0 {
 		c.LLM.MaxTokens = 128000
 	}
+	if err := defaultJev(&c.LLM.Jev); err != nil {
+		return nil, err
+	}
 
 	if rc.Aspects == nil || len(*rc.Aspects) == 0 {
 		return nil, errorf("aspects must not be empty")
@@ -190,6 +211,40 @@ func Parse(raw []byte) (*Config, error) {
 	return c, nil
 }
 
+// The thresholds start at the band the API documentation uses in its own examples.
+// That band is neither calibrated nor optimal for these checks, so it is a starting
+// point for eval to move, not a recommendation.
+func defaultJev(j *Jev) error {
+	if j.Model == "" {
+		j.Model = "jev-latest"
+	}
+	if j.HitThreshold == 0 {
+		j.HitThreshold = 0.70
+	}
+	if j.MissThreshold == 0 {
+		j.MissThreshold = 0.30
+	}
+	if j.MaxValueChars == 0 {
+		j.MaxValueChars = 2000
+	}
+	if j.Concurrency == 0 {
+		j.Concurrency = 4
+	}
+	if j.MissThreshold <= 0 || j.HitThreshold >= 1 {
+		return errorf("llm.jev: thresholds must be within 0 < miss_threshold and hit_threshold < 1")
+	}
+	if j.MissThreshold > j.HitThreshold {
+		return errorf("llm.jev: miss_threshold %v must not be above hit_threshold %v", j.MissThreshold, j.HitThreshold)
+	}
+	if j.Concurrency < 1 {
+		return errorf("llm.jev: concurrency must be at least 1")
+	}
+	if j.MaxValueChars < 1 {
+		return errorf("llm.jev: max_value_chars must be at least 1")
+	}
+	return nil
+}
+
 func convertCheck(r rawCheck) (model.Check, error) {
 	if r.ID == "" {
 		return model.Check{}, errorf("check id must not be empty")
@@ -217,19 +272,37 @@ func convertCheck(r rawCheck) (model.Check, error) {
 	default:
 		return model.Check{}, errorf("check %q: unknown verdict_on_match %q (hit|ask|unverifiable)", r.ID, r.VerdictOnMatch)
 	}
-	if m.IsZero() && r.Question == "" {
-		return model.Check{}, errorf("check %q: needs at least one of match or question", r.ID)
+	// Either phrasing sends the check to a judge; which one is used depends on whether
+	// the judge answers in prose or in a score.
+	judged := r.Question != "" || r.Instructions != ""
+	if len(r.Criteria) > 0 && r.Instructions == "" {
+		return model.Check{}, errorf("check %q: criteria bounds instructions, so it needs instructions", r.ID)
+	}
+	for k := range r.Criteria {
+		if k != "true" && k != "false" {
+			return model.Check{}, errorf("check %q: unknown criteria key %q (true|false)", r.ID, k)
+		}
+	}
+	if m.IsZero() && !judged {
+		return model.Check{}, errorf("check %q: needs at least one of match, question or instructions", r.ID)
 	}
 	if m.IsZero() && on != model.OnMatchHit {
 		return model.Check{}, errorf("check %q: verdict_on_match %q requires match", r.ID, on)
 	}
-	if on == model.OnMatchAsk && r.Question == "" {
-		return model.Check{}, errorf("check %q: verdict_on_match ask requires question", r.ID)
+	if on == model.OnMatchAsk && !judged {
+		return model.Check{}, errorf("check %q: verdict_on_match ask requires question or instructions", r.ID)
 	}
-	if !m.IsZero() && (on == model.OnMatchHit || on == model.OnMatchUnverifiable) && r.Question != "" {
-		return model.Check{}, errorf("check %q: question has no effect with verdict_on_match %q; use ask or remove the question", r.ID, on)
+	if !m.IsZero() && (on == model.OnMatchHit || on == model.OnMatchUnverifiable) && judged {
+		return model.Check{}, errorf("check %q: question and instructions have no effect with verdict_on_match %q; use ask or remove them", r.ID, on)
 	}
-	return model.Check{ID: r.ID, Severity: severity, Match: m, OnMatch: on, Question: r.Question, Requires: r.Requires}, nil
+	ck := model.Check{
+		ID: r.ID, Severity: severity, Match: m, OnMatch: on,
+		Question: r.Question, Instructions: r.Instructions, Requires: r.Requires,
+	}
+	if len(r.Criteria) > 0 {
+		ck.Criteria = &model.Criteria{True: r.Criteria["true"], False: r.Criteria["false"]}
+	}
+	return ck, nil
 }
 
 func convertCheckpoint(resourceType string, r rawCheckpoint) (model.Checkpoint, error) {
