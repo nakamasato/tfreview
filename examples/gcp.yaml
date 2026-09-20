@@ -19,6 +19,16 @@ aspects:
           removing one from a `serviceAccount:` used by CI or a workload does, and so
           does replacing an authoritative `google_*_iam_policy`. Read the principal
           from the resource address (for_each key) and `after`.
+        instructions: |
+          The change at `focus` deletes or replaces a resource that currently serves
+          traffic or holds state.
+        criteria:
+          true: >-
+            the action is delete or replace, and the resource serves requests, stores
+            data, or is an authoritative google_*_iam_policy
+          false: >-
+            the action is create or update, or the resource is an IAM binding whose
+            only member is a user: principal
 
       # unverifiable: the plan cannot show whether an output change or resource
       # replacement here breaks a downstream target's terraform_remote_state read,
@@ -63,6 +73,17 @@ aspects:
           Is a write-capable role (roles/owner, roles/editor, *.admin,
           roles/iam.securityAdmin, …) granted to a `user:` principal? `serviceAccount:`
           does not count. Answer only whether it happens. Viewer roles do not count.
+        # Both exclusions the question words as asides become criteria.false here,
+        # because a score cannot carry "except when".
+        instructions: |
+          The change at `focus` grants a write-capable role to a human principal.
+        criteria:
+          true: >-
+            a member added in after is a user: principal, and the role confers write,
+            admin or owner capability
+          false: >-
+            every member added is a serviceAccount: or group: principal, or the role
+            is read-only such as roles/viewer or a *.viewer role
 
       - id: firewall-open
         severity: high
