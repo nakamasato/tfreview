@@ -23,9 +23,16 @@ type Resource struct {
 	ModuleAddress string         `json:"module_address"`
 	ProviderName  string         `json:"provider_name"`
 	Actions       []string       `json:"actions"`
+	ActionReason  string         `json:"action_reason,omitempty"`
+	ReplacePaths  []string       `json:"replace_paths,omitempty"`
 	After         map[string]any `json:"after"`
 	ChangedKeys   []string       `json:"changed_keys,omitempty"`
 	UnknownKeys   []string       `json:"unknown_keys,omitempty"`
+	// Refs and ReferredBy hold only addresses this plan also changes. They come from
+	// the plan's configuration section today; nothing about the fields assumes that,
+	// so another source can fill them without changing what reads them.
+	Refs       []string `json:"refs,omitempty"`
+	ReferredBy []string `json:"referred_by,omitempty"`
 }
 
 type Plan struct {

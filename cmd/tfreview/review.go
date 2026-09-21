@@ -71,10 +71,14 @@ func newReviewCmd() *cobra.Command {
 			if err != nil {
 				return &exitError{code: 2, msg: err.Error()}
 			}
-			if cfg.LLM.Provider == "anthropic" && os.Getenv("ANTHROPIC_API_KEY") == "" {
-				// report-only tool: a missing key must not stop the run, but a
-				// silent tfreview:unknown with no explanation is worse than noise.
-				cmd.PrintErrln("warning: ANTHROPIC_API_KEY is not set; LLM checks will be skipped and the result will be tfreview:unknown")
+			deep, err := newDeepProvider(cfg)
+			if err != nil {
+				return &exitError{code: 2, msg: err.Error()}
+			}
+			// report-only tool: a missing key must not stop the run, but a silent
+			// tfreview:unknown with no explanation is worse than noise.
+			if key, ok := missingKey(cfg.LLM.Provider); !ok {
+				cmd.PrintErrf("warning: %s is not set; judged checks will be skipped and the result will be tfreview:unknown\n", key)
 			}
 			if headSHA == "" {
 				headSHA = gitHead()
@@ -86,13 +90,13 @@ func newReviewCmd() *cobra.Command {
 				repo = gitRemoteRepo()
 			}
 
-			out, err := judge.Run(cmd.Context(), judge.Input{Config: cfg, Plans: ps, Provider: provider, Prev: state.Load(stateIn), HeadSHA: headSHA})
+			out, err := judge.Run(cmd.Context(), judge.Input{Config: cfg, Plans: ps, Provider: provider, Deep: deep, Prev: state.Load(stateIn), HeadSHA: headSHA})
 			if err != nil {
 				return err
 			}
 			result := render.Build(cfg, out, render.Meta{
 				HeadSHA: headSHA, JudgedAt: now().UTC().Format(time.RFC3339), Repo: repo,
-				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Pricing: llm.PricingFromMap(cfg.LLM.Pricing),
+				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil),
 			})
 
 			if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -277,4 +281,13 @@ func gitHead() string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// missingKey reports the environment variable a provider needs when it is unset.
+func missingKey(provider string) (string, bool) {
+	env := map[string]string{"anthropic": "ANTHROPIC_API_KEY", "jev": "TYPESAFE_API_KEY"}[provider]
+	if env == "" || os.Getenv(env) != "" {
+		return "", true
+	}
+	return env, false
 }

@@ -106,3 +106,18 @@ func TestExtractRejectsInvalidJSON(t *testing.T) {
 	_, err := Extract([]byte("{"), "x")
 	require.Error(t, err)
 }
+
+func TestExtractActionReasonAndReplacePaths(t *testing.T) {
+	raw := []byte(`{"resource_changes":[{
+		"address":"aws_db_instance.orders","type":"aws_db_instance","name":"orders",
+		"provider_name":"registry.terraform.io/hashicorp/aws",
+		"action_reason":"replace_because_cannot_update",
+		"change":{"actions":["delete","create"],"before":{"engine_version":"14"},
+			"after":{"engine_version":"15"},
+			"replace_paths":[["engine_version"],["restore_to_point_in_time",0,"source"]]}}]}`)
+	p, err := Extract(raw, "prd")
+	require.NoError(t, err)
+	r := byAddress(p, "aws_db_instance.orders")
+	require.Equal(t, "replace_because_cannot_update", r.ActionReason)
+	require.Equal(t, []string{"engine_version", "restore_to_point_in_time.0.source"}, r.ReplacePaths)
+}

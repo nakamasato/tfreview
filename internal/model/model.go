@@ -4,6 +4,7 @@ package model
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 type Severity string
@@ -65,6 +66,10 @@ type Verdict struct {
 	Source    Source      `json:"source"`
 	Severity  Severity    `json:"severity,omitempty"`
 	Resources []string    `json:"resources,omitempty"`
+	// Score is the highest probability a scoring judge gave any change for this check.
+	// It is kept after a closer look settles the check, because what the first pass
+	// scored is what the thresholds are calibrated against.
+	Score float64 `json:"score,omitempty"`
 }
 
 type Match struct {
@@ -92,13 +97,43 @@ const (
 
 func HasRequirement(reqs []string, req string) bool { return slices.Contains(reqs, req) }
 
+// Criteria bounds a proposition by saying what puts it on each side. It exists because
+// a probability-only judge has nowhere to record an exception it noticed, so every
+// exclusion has to be stated up front instead of left to the judge's discretion.
+type Criteria struct {
+	True  string
+	False string
+}
+
 type Check struct {
 	ID       string
 	Severity Severity
 	Match    Match
 	OnMatch  OnMatch
-	Question string
-	Requires []string
+	// Instructions states the check as a proposition. It is the only phrasing a config
+	// carries: a second one written for a prose judge would be a second source of truth
+	// that drifts, so the prose form is derived from this one instead.
+	Instructions string
+	Criteria     *Criteria
+	Requires     []string
+}
+
+// Prose renders the check for a judge that answers in prose rather than scoring. The
+// two sides of Criteria become the inclusions and exclusions such a question would
+// otherwise have worded as asides.
+func (c Check) Prose() string {
+	var sb strings.Builder
+	sb.WriteString(strings.TrimSpace(c.Instructions))
+	if c.Criteria == nil {
+		return sb.String()
+	}
+	if t := strings.TrimSpace(c.Criteria.True); t != "" {
+		sb.WriteString(" This holds when " + t + ".")
+	}
+	if f := strings.TrimSpace(c.Criteria.False); f != "" {
+		sb.WriteString(" It does not hold for " + f + ".")
+	}
+	return sb.String()
 }
 
 type Aspect struct {

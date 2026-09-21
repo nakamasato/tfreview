@@ -20,14 +20,14 @@ aspects:
         severity: critical
         match: { actions: [delete] }
         verdict_on_match: ask
-        question: Does it delete?
+        instructions: It deletes something.
       - id: unverifiable-thing
         severity: high
         match: { targets: [shared] }
         verdict_on_match: unverifiable
       - id: llm-only
         severity: medium
-        question: Anything odd?
+        instructions: Something is odd.
 `
 
 func TestParseMinimal(t *testing.T) {
@@ -61,10 +61,17 @@ func TestParseUsesBuiltinDefaultWhenNoAspects(t *testing.T) {
 	c, err := Parse([]byte("language: en\n"))
 	require.NoError(t, err)
 	require.NotEmpty(t, c.Aspects)
-	_, ok := c.Check("delete-or-replace")
-	require.True(t, ok)
-	_, ok = c.Check("stateful-delete")
-	require.True(t, ok)
+	// The builtin defaults are one scored check per aspect, plus the one rule that a
+	// judge cannot improve on.
+	var ids []string
+	for _, asp := range c.Aspects {
+		for _, ck := range asp.Checks {
+			ids = append(ids, ck.ID)
+		}
+	}
+	require.ElementsMatch(t, []string{"resource-deletion", "stateful-delete", "data-loss", "polp", "cost"}, ids)
+	require.ElementsMatch(t, []string{"resource-deletion", "data-loss", "polp", "cost"},
+		[]string{c.Aspects[0].ID, c.Aspects[1].ID, c.Aspects[2].ID, c.Aspects[3].ID})
 }
 
 func TestParseEmptyConfig(t *testing.T) {
@@ -82,18 +89,18 @@ func TestDigestChangesWithContent(t *testing.T) {
 
 func TestValidationErrors(t *testing.T) {
 	cases := map[string]string{
-		"bad level":                      "aspects: [{id: a, title: A, checks: [{id: x, severity: severe, question: q}]}]",
+		"bad level":                      "aspects: [{id: a, title: A, checks: [{id: x, severity: severe, instructions: q}]}]",
 		"bad verdict_on_match":           "aspects: [{id: a, title: A, checks: [{id: x, severity: high, match: {actions: [delete]}, verdict_on_match: maybe}]}]",
 		"unknown match key":              "aspects: [{id: a, title: A, checks: [{id: x, severity: high, match: {paths: [x]}}]}]",
 		"match not list":                 "aspects: [{id: a, title: A, checks: [{id: x, severity: high, match: {actions: delete}}]}]",
 		"no question no match":           "aspects: [{id: a, title: A, checks: [{id: x, severity: high}]}]",
-		"ask without match":              "aspects: [{id: a, title: A, checks: [{id: x, severity: high, verdict_on_match: ask, question: q}]}]",
-		"dup check id":                   "aspects: [{id: a, title: A, checks: [{id: x, severity: high, question: q}, {id: x, severity: high, question: q}]}]",
-		"dup aspect id":                  "aspects: [{id: a, title: A, checks: [{id: x, severity: high, question: q}]}, {id: a, title: B, checks: [{id: y, severity: high, question: q}]}]",
+		"ask without match":              "aspects: [{id: a, title: A, checks: [{id: x, severity: high, verdict_on_match: ask, instructions: q}]}]",
+		"dup check id":                   "aspects: [{id: a, title: A, checks: [{id: x, severity: high, instructions: q}, {id: x, severity: high, instructions: q}]}]",
+		"dup aspect id":                  "aspects: [{id: a, title: A, checks: [{id: x, severity: high, instructions: q}]}, {id: a, title: B, checks: [{id: y, severity: high, instructions: q}]}]",
 		"empty aspects":                  "aspects: []",
 		"bad provider":                   "llm: {provider: openai}",
-		"question inert on hit":          "aspects: [{id: a, title: A, checks: [{id: x, severity: high, match: {actions: [delete]}, question: q}]}]",
-		"question inert on unverifiable": "aspects: [{id: a, title: A, checks: [{id: x, severity: high, match: {actions: [delete]}, verdict_on_match: unverifiable, question: q}]}]",
+		"question inert on hit":          "aspects: [{id: a, title: A, checks: [{id: x, severity: high, match: {actions: [delete]}, instructions: q}]}]",
+		"question inert on unverifiable": "aspects: [{id: a, title: A, checks: [{id: x, severity: high, match: {actions: [delete]}, verdict_on_match: unverifiable, instructions: q}]}]",
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -117,7 +124,7 @@ aspects:
     checks:
       - id: guard-relaxed
         severity: critical
-        question: is a guard relaxed?
+        instructions: is a guard relaxed?
 checkpoints_for_resource:
   aws_db_instance:
     - id: rds-deletion-protection
@@ -156,7 +163,7 @@ func TestParseRejects(t *testing.T) {
 			want: "aspects",
 		},
 		"legacy level": {
-			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        level: high\n        question: q\n",
+			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        level: high\n        instructions: q\n",
 			want: "severity",
 		},
 		"checkpoint without aspect": {
@@ -180,7 +187,7 @@ func TestParseRejects(t *testing.T) {
 			want: "severity must be medium, high or critical",
 		},
 		"duplicate id across check and checkpoint": {
-			yaml: "aspects:\n  - id: a\n    checks:\n      - id: dup\n        severity: high\n        question: q\ncheckpoints_for_resource:\n  aws_db_instance:\n    - id: dup\n      aspect: a\n      severity: high\n      guidance: g\n",
+			yaml: "aspects:\n  - id: a\n    checks:\n      - id: dup\n        severity: high\n        instructions: q\ncheckpoints_for_resource:\n  aws_db_instance:\n    - id: dup\n      aspect: a\n      severity: high\n      guidance: g\n",
 			want: "duplicated",
 		},
 		"empty resource type": {
@@ -188,8 +195,28 @@ func TestParseRejects(t *testing.T) {
 			want: "resource type must not be empty",
 		},
 		"unknown requires": {
-			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        requires: [repo]\n        question: q\n",
+			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        requires: [repo]\n        instructions: q\n",
 			want: "unknown requires",
+		},
+		"criteria without instructions": {
+			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        criteria: { true: t }\n",
+			want: "criteria bounds instructions",
+		},
+		"instructions with verdict_on_match hit": {
+			yaml: "aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        match: { actions: [delete] }\n        instructions: p\n",
+			want: "have no effect with verdict_on_match",
+		},
+		"jev miss above hit": {
+			yaml: "llm:\n  jev:\n    hit_threshold: 0.4\n    miss_threshold: 0.6\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: q\n",
+			want: "must not be above hit_threshold",
+		},
+		"jev hit threshold at 1": {
+			yaml: "llm:\n  jev:\n    hit_threshold: 1\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: q\n",
+			want: "thresholds must be within",
+		},
+		"jev concurrency below one": {
+			yaml: "llm:\n  jev:\n    concurrency: -1\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: q\n",
+			want: "concurrency must be at least 1",
 		},
 		"non-url reference": {
 			yaml: "aspects:\n  - id: a\ncheckpoints_for_resource:\n  aws_db_instance:\n    - id: x\n      aspect: a\n      severity: high\n      guidance: g\n      references: [not-a-url]\n",
@@ -210,7 +237,7 @@ func TestParseRejects(t *testing.T) {
 }
 
 func TestParseRequires(t *testing.T) {
-	c, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        requires: [diff, pr]\n        question: q\n"))
+	c, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        requires: [diff, pr]\n        instructions: q\n"))
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -218,4 +245,37 @@ func TestParseRequires(t *testing.T) {
 	if !model.HasRequirement(ck.Requires, model.RequiresDiff) || !model.HasRequirement(ck.Requires, model.RequiresPR) {
 		t.Errorf("Requires = %v", ck.Requires)
 	}
+}
+
+func TestParseJevDefaults(t *testing.T) {
+	c, err := Parse([]byte(minimal))
+	require.NoError(t, err)
+	require.Equal(t, Jev{Model: "jev-latest", HitThreshold: 0.70, MissThreshold: 0.30, MaxValueChars: 2000, Concurrency: 4}, c.LLM.Jev)
+}
+
+func TestParseJevOverrides(t *testing.T) {
+	c, err := Parse([]byte("llm:\n  jev:\n    model: jev-1.13.0\n    hit_threshold: 0.8\n    miss_threshold: 0.2\n    max_value_chars: 500\n    concurrency: 8\naspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: q\n"))
+	require.NoError(t, err)
+	require.Equal(t, Jev{Model: "jev-1.13.0", HitThreshold: 0.8, MissThreshold: 0.2, MaxValueChars: 500, Concurrency: 8}, c.LLM.Jev)
+}
+
+func TestParseInstructionsAndCriteria(t *testing.T) {
+	c, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: The change deletes a database.\n        criteria:\n          true: the action is delete\n          false: the action is create\n"))
+	require.NoError(t, err)
+	ck, ok := c.Check("c")
+	require.True(t, ok)
+	require.Equal(t, "The change deletes a database.", ck.Instructions)
+	require.Equal(t, &model.Criteria{True: "the action is delete", False: "the action is create"}, ck.Criteria)
+}
+
+func TestParseCriteriaRejectsUnknownKey(t *testing.T) {
+	_, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: p\n        criteria: { maybe: m }\n"))
+	require.ErrorContains(t, err, `unknown criteria key "maybe"`)
+}
+
+func TestParseCriteriaAcceptsQuotedKeys(t *testing.T) {
+	c, err := Parse([]byte("aspects:\n  - id: a\n    checks:\n      - id: c\n        severity: high\n        instructions: p\n        criteria:\n          \"true\": t\n"))
+	require.NoError(t, err)
+	ck, _ := c.Check("c")
+	require.Equal(t, &model.Criteria{True: "t"}, ck.Criteria)
 }

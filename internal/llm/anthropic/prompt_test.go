@@ -18,7 +18,7 @@ func TestBuildSystemLanguage(t *testing.T) {
 
 func TestBuildUserContainsTargetPlanAndChecks(t *testing.T) {
 	p := &plan.Plan{Target: "prd", Resources: []plan.Resource{{Address: "aws_s3_bucket.x", Type: "aws_s3_bucket", Actions: []string{"delete"}}}}
-	req := llm.Request{Plan: p, Checks: []model.Check{{ID: "a", Question: "Q-A?"}, {ID: "b", Question: "Q-B?"}}}
+	req := llm.Request{Plan: p, Checks: []model.Check{{ID: "a", Instructions: "Q-A?"}, {ID: "b", Instructions: "Q-B?"}}}
 	user := BuildUser(req, PlanJSON(p))
 	require.Contains(t, user, "`prd`")
 	require.Contains(t, user, `"aws_s3_bucket.x"`)

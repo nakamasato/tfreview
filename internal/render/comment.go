@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/nakamasato/tfreview/internal/llm"
 	"github.com/nakamasato/tfreview/internal/model"
 )
 
@@ -77,11 +78,18 @@ func Comment(r *Result) string {
 		}
 	}
 	if r.Usage.Calls > 0 {
-		u := r.Usage
-		fmt.Fprintf(&b, "<sub>%s · %d %s · in %s / cache write %s / cache read %s / out %s %s · ≈ $%.4f</sub>\n",
-			r.Model, u.Calls, s.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), s.Tokens, r.CostUSD)
+		parts := []string{usageLine(r.Model, r.Usage, s)}
+		if r.DeepUsage.Calls > 0 {
+			parts = append(parts, usageLine(r.DeepModel, r.DeepUsage, s))
+		}
+		fmt.Fprintf(&b, "<sub>%s · ≈ $%.4f</sub>\n", strings.Join(parts, " + "), r.CostUSD)
 	}
 	return wrap(b.String())
+}
+
+func usageLine(model string, u llm.Usage, s texts) string {
+	return fmt.Sprintf("%s · %d %s · in %s / cache write %s / cache read %s / out %s %s",
+		model, u.Calls, s.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), s.Tokens)
 }
 
 // wrap closes the comment body between the Begin/End markers. Free text that

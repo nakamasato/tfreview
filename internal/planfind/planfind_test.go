@@ -138,10 +138,10 @@ func TestFromZipSameBasenameDifferentDirsBothSurvive(t *testing.T) {
 // strings.Contains(name, "..") check would miss or mishandle.
 func TestFromZipRejectsWeirdPathTraversal(t *testing.T) {
 	for _, name := range []string{
-		"/etc/evil.json",       // absolute path
-		"a/../../evil.json",    // escapes root only after cleaning
-		"..",                   // bare ".." as the whole name
-		"a/..",                 // ".." as the final segment
+		"/etc/evil.json",    // absolute path
+		"a/../../evil.json", // escapes root only after cleaning
+		"..",                // bare ".." as the whole name
+		"a/..",              // ".." as the final segment
 	} {
 		archive := zipWith(t, map[string]string{name: rawShowJSON})
 		found, err := FromZip(archive, "artifact", nil)

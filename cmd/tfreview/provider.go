@@ -9,6 +9,8 @@ import (
 	"github.com/nakamasato/tfreview/internal/llm"
 	"github.com/nakamasato/tfreview/internal/llm/anthropic"
 	"github.com/nakamasato/tfreview/internal/llm/claudecli"
+	"github.com/nakamasato/tfreview/internal/llm/deepdive"
+	"github.com/nakamasato/tfreview/internal/llm/jev"
 	"github.com/nakamasato/tfreview/internal/llm/mock"
 	"github.com/nakamasato/tfreview/internal/model"
 )
@@ -19,6 +21,15 @@ func newProvider(cfg *config.Config) (llm.Provider, error) {
 		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, MaxTokens: cfg.LLM.MaxTokens, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
 	case "claude-cli":
 		return claudecli.New(claudecli.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars}), nil
+	case "jev":
+		j := cfg.LLM.Jev
+		return jev.NewProvider(jev.ProviderOptions{
+			Options:       jev.Options{APIKey: os.Getenv("TYPESAFE_API_KEY"), Model: j.Model},
+			HitThreshold:  j.HitThreshold,
+			MissThreshold: j.MissThreshold,
+			MaxValueChars: j.MaxValueChars,
+			Concurrency:   j.Concurrency,
+		}), nil
 	case "mock":
 		// mock returns fixed verdicts without calling any LLM; gating it behind an
 		// explicit opt-in keeps a config typo (or a copied test config) from
@@ -29,6 +40,29 @@ func newProvider(cfg *config.Config) (llm.Provider, error) {
 		return mockFromEnv()
 	}
 	return nil, fmt.Errorf("unsupported provider %q", cfg.LLM.Provider)
+}
+
+// newDeepProvider builds the second pass, or nil when none is configured. It is handed
+// a scoring client so its own propositions get a calibrated probability rather than the
+// agent's impression of one.
+func newDeepProvider(cfg *config.Config) (llm.Provider, error) {
+	if cfg.LLM.DeepDive == "" {
+		return nil, nil
+	}
+	if cfg.LLM.DeepDive != "anthropic" {
+		return nil, fmt.Errorf("unsupported llm.deep_dive %q", cfg.LLM.DeepDive)
+	}
+	var scorer *jev.Client
+	if key := os.Getenv("TYPESAFE_API_KEY"); key != "" {
+		scorer = jev.New(jev.Options{APIKey: key, Model: cfg.LLM.Jev.Model})
+	}
+	return deepdive.New(deepdive.Options{
+		Model:         cfg.LLM.Model,
+		APIKey:        os.Getenv("ANTHROPIC_API_KEY"),
+		MaxValueChars: cfg.LLM.Jev.MaxValueChars,
+		Checkpoints:   cfg.Checkpoints,
+		Scorer:        scorer,
+	}), nil
 }
 
 // mock is for CLI end-to-end tests. Answers are read from the TFREVIEW_MOCK_ANSWERS JSON.

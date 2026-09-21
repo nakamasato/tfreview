@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
@@ -22,12 +23,12 @@ aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
-      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
+      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, instructions: q}
       - {id: shared, severity: critical, match: {targets: [shared]}, verdict_on_match: unverifiable}
   - id: exposure
     title: Permissions / exposure
     checks:
-      - {id: sg-open, severity: high, question: q}
+      - {id: sg-open, severity: high, instructions: q}
 `
 
 func fixture(t *testing.T, lang string) (*config.Config, *judge.Output, Meta) {
@@ -219,4 +220,46 @@ func TestResultSaveLoad(t *testing.T) {
 	got, err := LoadResult(p)
 	require.NoError(t, err)
 	require.Equal(t, r, got)
+}
+
+func TestBuildCarriesScore(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	out.Verdicts["sg-open"] = model.Verdict{
+		CheckID: "sg-open", Kind: model.VerdictUnverifiable, Source: model.SourceLLM,
+		Reason: "needs a closer look", Score: 0.41, Resources: []string{"aws_security_group.web"},
+	}
+	r := Build(c, out, meta)
+	got := r.Categories[1].Checks[0]
+	require.Equal(t, 0.41, got.Score)
+	require.Equal(t, []string{"aws_security_group.web"}, got.Resources)
+
+	// A prose judge sets neither, and the fields stay out of the JSON rather than
+	// reading as a score of zero.
+	b, err := json.Marshal(r.Categories[0].Checks[0])
+	require.NoError(t, err)
+	require.NotContains(t, string(b), `"score"`)
+	require.NotContains(t, string(b), `"resources"`)
+}
+
+func TestBuildPricesEachPassAtItsOwnRate(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	out.Usage = llm.Usage{Calls: 7, InputTokens: 1_000_000}
+	out.DeepUsage = llm.Usage{Calls: 4, InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	meta.Model, meta.Pricing = "jev-latest", llm.DefaultPricingFor("jev")
+	meta.DeepModel, meta.DeepPricing = "claude-opus-5", llm.DefaultPricing
+
+	r := Build(c, out, meta)
+	// 1M input at 0.042, plus 1M input at 5.00 and 1M output at 25.00.
+	require.InDelta(t, 0.042+5.00+25.00, r.CostUSD, 1e-9)
+
+	body := Comment(r)
+	require.Contains(t, body, "jev-latest · 7 calls")
+	require.Contains(t, body, "claude-opus-5 · 4 calls")
+}
+
+func TestFooterOmitsAnAbsentSecondPass(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	body := Comment(Build(c, out, meta))
+	footer := body[strings.Index(body, "<sub>"):]
+	require.Equal(t, 1, strings.Count(footer, " calls "), footer)
 }

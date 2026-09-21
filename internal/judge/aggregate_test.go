@@ -15,8 +15,8 @@ aspects:
   - id: c1
     title: C1
     checks:
-      - {id: crit, severity: critical, question: q}
-      - {id: med, severity: medium, question: q}
+      - {id: crit, severity: critical, instructions: q}
+      - {id: med, severity: medium, instructions: q}
   - id: c2
     title: C2
     checks:

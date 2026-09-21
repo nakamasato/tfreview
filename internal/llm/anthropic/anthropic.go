@@ -1,8 +1,9 @@
 // Package anthropic evaluates a plan via the Messages API.
 //
-// This is a single one-shot call rather than an agent loop, to preserve the
-// invariant that the only input is the plan result. Giving it tools would let
-// it reach into the repository or the outside world.
+// This is a single one-shot call with no tools: it judges every check from the plan it
+// was handed and asks for nothing more. The deepdive package is the counterpart that
+// does take tools, and stays within the same invariant by only ever reaching back into
+// the plan — what a tool must not do here is reach the repository or the network.
 package anthropic
 
 import (

@@ -19,7 +19,7 @@ func BuildSystem(language string) string {
 	}
 	return fmt.Sprintf(`You review Terraform changes. Judge each check id using ONLY the given `+"`terraform plan`"+` result.
 - Never mark a check as hit based on something the plan does not show.
-- If the plan cannot answer the question, return "unverifiable" and say why.
+- Each check is stated as a proposition: hit means it holds, miss means it does not.\n- If the plan cannot tell, return "unverifiable" and say why.
 - `+"`changed_keys`"+` lists the attributes whose value changed in this plan; use it to decide whether something was added or relaxed by this change.
 - `+"`unknown_keys`"+` lists attributes whose value is not known until apply; even if such an attribute shows as null, that does not mean it is unset, so never treat an attribute in `+"`unknown_keys`"+` as "not configured".
 - reason: 1-2 sentences %s, naming the resource addresses it relies on.
@@ -36,7 +36,7 @@ func BuildUser(req llm.Request, planJSON string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "# Target\n\n`%s`\n\n# terraform plan result\n\n```json\n%s\n```\n\n# Checks\n\n", req.Plan.Target, planJSON)
 	for _, c := range req.Checks {
-		fmt.Fprintf(&sb, "- %s: %s\n", c.ID, strings.TrimSpace(c.Question))
+		fmt.Fprintf(&sb, "- %s: %s\n", c.ID, c.Prose())
 	}
 	return sb.String()
 }

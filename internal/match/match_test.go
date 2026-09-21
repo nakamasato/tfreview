@@ -21,7 +21,7 @@ func plans() []*plan.Plan {
 }
 
 func TestEvaluateNoMatchConfigured(t *testing.T) {
-	_, ok := Evaluate(model.Check{ID: "q", Question: "?"}, plans())
+	_, ok := Evaluate(model.Check{ID: "q", Instructions: "?"}, plans())
 	require.False(t, ok)
 }
 

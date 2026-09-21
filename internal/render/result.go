@@ -19,6 +19,10 @@ type CheckResult struct {
 	Verdict model.VerdictKind `json:"verdict"`
 	Reason  string            `json:"reason"`
 	Source  model.Source      `json:"source"`
+	// Score and Resources are set only by a scoring judge. They are what eval reads to
+	// calibrate the thresholds, so they are published rather than left in state.
+	Score     float64  `json:"score,omitempty"`
+	Resources []string `json:"resources,omitempty"`
 }
 
 type CategoryResult struct {
@@ -53,16 +57,21 @@ type Result struct {
 	Targets     []TargetResult   `json:"targets"`
 	Unevaluated []string         `json:"unevaluated"`
 	Usage       llm.Usage        `json:"usage"`
-	CostUSD     float64          `json:"cost_usd"`
+	// DeepModel and DeepUsage are the second pass. CostUSD covers both.
+	DeepModel string    `json:"deep_model,omitempty"`
+	DeepUsage llm.Usage `json:"deep_usage"`
+	CostUSD   float64   `json:"cost_usd"`
 }
 
 type Meta struct {
-	HeadSHA    string
-	JudgedAt   string
-	Repo       string
-	ConfigPath string
-	Model      string
-	Pricing    llm.Pricing
+	HeadSHA     string
+	JudgedAt    string
+	Repo        string
+	ConfigPath  string
+	Model       string
+	Pricing     llm.Pricing
+	DeepModel   string
+	DeepPricing llm.Pricing
 }
 
 func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
@@ -72,6 +81,11 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 		Usage: out.Usage, Unevaluated: []string{}, Targets: []TargetResult{}, Categories: []CategoryResult{},
 	}
 	r.CostUSD = out.Usage.Cost(meta.Pricing)
+	if out.DeepUsage.Calls > 0 {
+		r.DeepModel = meta.DeepModel
+		r.DeepUsage = out.DeepUsage
+		r.CostUSD += out.DeepUsage.Cost(meta.DeepPricing)
+	}
 	for _, t := range out.Targets {
 		r.Targets = append(r.Targets, TargetResult{Target: t.Target, Counts: t.Counts, Reused: t.Reused})
 	}
@@ -90,7 +104,7 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 			if v.Kind == model.VerdictHit || v.Kind == model.VerdictUnverifiable {
 				cr.Hits++
 			}
-			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Severity, Verdict: v.Kind, Reason: v.Reason, Source: v.Source})
+			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Severity, Verdict: v.Kind, Reason: v.Reason, Source: v.Source, Score: v.Score, Resources: v.Resources})
 		}
 		r.Categories = append(r.Categories, cr)
 	}

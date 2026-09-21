@@ -4,6 +4,7 @@ package judge
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/nakamasato/tfreview/internal/config"
 	"github.com/nakamasato/tfreview/internal/llm"
@@ -18,8 +19,11 @@ type Input struct {
 	Config   *config.Config
 	Plans    []*plan.Plan
 	Provider llm.Provider
-	Prev     *state.State
-	HeadSHA  string
+	// Deep takes a second look at the checks Provider left undecided. Nil skips it,
+	// and those checks stay unverifiable.
+	Deep    llm.Provider
+	Prev    *state.State
+	HeadSHA string
 }
 
 type TargetOutcome struct {
@@ -33,9 +37,12 @@ type Output struct {
 	Unevaluated map[string]bool
 	Targets     []TargetOutcome
 	Usage       llm.Usage
-	State       *state.State
-	NoPlans     bool
-	NoChanges   bool
+	// DeepUsage is the second pass, kept apart because it is billed by a different
+	// provider at rates that differ by orders of magnitude.
+	DeepUsage llm.Usage
+	State     *state.State
+	NoPlans   bool
+	NoChanges bool
 }
 
 func Run(ctx context.Context, in Input) (*Output, error) {
@@ -82,7 +89,7 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 
 	var llmChecks []model.Check
 	for _, ck := range checks {
-		if !ruleDecided[ck.ID] && ck.Question != "" {
+		if !ruleDecided[ck.ID] && ck.Instructions != "" {
 			llmChecks = append(llmChecks, ck)
 		}
 	}
@@ -98,6 +105,11 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 			var usage llm.Usage
 			vs, usage = judgeTarget(ctx, in.Provider, llm.Request{Plan: p, Checks: llmChecks, Language: cfg.Language})
 			out.Usage.Add(usage)
+			if in.Deep != nil {
+				var deepUsage llm.Usage
+				vs, deepUsage = deepen(ctx, in.Deep, p, llmChecks, vs, cfg.Language)
+				out.DeepUsage.Add(deepUsage)
+			}
 		}
 		out.State.Put(p.Target, digest, vs)
 		for _, v := range vs {
@@ -158,6 +170,8 @@ func judgeTarget(ctx context.Context, provider llm.Provider, req llm.Request) ([
 			} else {
 				v.Kind = a.Kind
 				v.Reason = a.Reason
+				v.Resources = a.Resources
+				v.Score = a.Score
 			}
 		}
 		out = append(out, v)
@@ -187,4 +201,46 @@ func anyChanges(plans []*plan.Plan) bool {
 		}
 	}
 	return false
+}
+
+// deepen re-judges only what the first pass could not settle, and only while it named
+// the changes to look at. An unverifiable verdict with nothing to point at is a
+// statement that the plan cannot show this, which a closer look will not change.
+func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model.Check, vs []model.Verdict, language string) ([]model.Verdict, llm.Usage) {
+	focus := map[string][]string{}
+	for _, v := range vs {
+		if v.Kind == model.VerdictUnverifiable && len(v.Resources) > 0 {
+			focus[v.CheckID] = v.Resources
+		}
+	}
+	if len(focus) == 0 {
+		return vs, llm.Usage{}
+	}
+	var undecided []model.Check
+	for _, ck := range checks {
+		if _, ok := focus[ck.ID]; ok {
+			undecided = append(undecided, ck)
+		}
+	}
+	deeper, usage := judgeTarget(ctx, deep, llm.Request{Plan: p, Checks: undecided, Language: language, Focus: focus})
+	byID := map[string]model.Verdict{}
+	for _, v := range deeper {
+		byID[v.CheckID] = v
+	}
+	out := make([]model.Verdict, 0, len(vs))
+	for _, v := range vs {
+		// A closer look that failed outright leaves the first pass's verdict in place:
+		// "needs a closer look" is more use to a reviewer than "not evaluated".
+		if d, ok := byID[v.CheckID]; ok && d.Kind != model.VerdictSkipped {
+			d.Resources = v.Resources
+			d.Score = v.Score
+			// Keep the trail: a reviewer reading only the agent's conclusion cannot tell it
+			// was a second opinion on something the first pass could not settle.
+			d.Reason = fmt.Sprintf("scored %.2f, then on a closer look: %s", v.Score, d.Reason)
+			out = append(out, d)
+			continue
+		}
+		out = append(out, v)
+	}
+	return out, usage
 }

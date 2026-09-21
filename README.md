@@ -15,8 +15,8 @@ the verdict you get on your laptop.
 - **Plan-only review.** The only input is the `terraform plan` result. No agent
   walks your repository, so verdicts are stable and each target costs one API call.
 - **Your criteria, in YAML.** What counts as dangerous lives in `.tfreview.yaml`.
-  Deterministic checks (`match`) and LLM checks (`question`) combine into four
-  check types; the config decides the level, the LLM only says hit / miss.
+  Deterministic checks (`match`) and judged checks (`instructions`) combine into four
+  check types; the config decides the severity, the LLM only says hit / miss.
 - **Incremental.** Verdicts are cached per target by the hash of plan + config. A
   push that does not change a target's plan re-uses its verdicts: no drift, no
   extra cost.
@@ -87,7 +87,21 @@ names don't match a common naming convention.
 `--repo` defaults to the `GITHUB_REPOSITORY` environment variable, then the
 `origin` remote of the current directory (github.com only).
 
-Without `ANTHROPIC_API_KEY` set, `review` still runs, prints a warning to
+`llm.provider: jev` scores each change separately: one small call per change
+rather than one call per target, and it returns probabilities instead of prose, so
+a verdict's reason names the changes that scored and how high. A score between the
+thresholds settles nothing, so the check comes back `unverifiable` naming the
+changes to look at rather than being reported as a miss.
+
+`llm.deep_dive: anthropic` then takes those changes and settles them. It runs a
+tool loop that reads the plan — one change's attributes, the changes that reference
+it, the plan filtered by type or action — and can put propositions of its own to
+the scoring judge, then reports a verdict with a reason in words. Its tools reach
+only into the plan and back into the scoring judge, never the repository or the
+network, so the plan stays the only input. It needs `ANTHROPIC_API_KEY`; without
+`deep_dive` the undecided checks stay `unverifiable`.
+
+Without the provider's API key set, `review` still runs, prints a warning to
 stderr, and labels the result `tfreview:unknown` since no LLM checks could be
 judged.
 
@@ -118,32 +132,42 @@ tests only) additionally requires the environment variable
 ```yaml
 language: en                 # default en. Language of the fixed comment text and LLM instructions
 llm:
-  provider: anthropic        # anthropic | claude-cli (the local `claude` CLI, no API key) | mock
+  provider: anthropic        # anthropic | claude-cli (the local `claude` CLI, no API key) | jev | mock
   model: claude-opus-5
   max_plan_chars: 100000     # skip the LLM call and mark every check unverifiable above this size
   max_tokens: 128000         # max_tokens for the judging call; lower it only for a model with a smaller output cap
-  pricing:                   # USD / Mtok, used only for the footer's cost estimate; built-in default if omitted
+  pricing:                   # USD / Mtok, used only for the footer's cost estimate; per-provider default if omitted
     input: 5.00
     cache_write: 6.25
     cache_read: 0.50
     output: 25.00
-categories:
-  - id: destruction
-    title: Destruction / downtime
+  deep_dive: ""              # "" (off) | anthropic. Takes a second look at what the first pass left undecided
+  jev:                       # llm.provider: jev. Needs TYPESAFE_API_KEY
+    model: jev-latest
+    hit_threshold: 0.70      # a score at or above this is a hit
+    miss_threshold: 0.30     # at or below is a miss; the band between is undecided
+    max_value_chars: 2000    # shorten long individual attribute values
+    concurrency: 4           # scored checks in flight at once
+aspects:
+  - id: resource-deletion
+    title: Resource deletion
     checks:
-      - id: delete-or-replace
-        level: critical                    # none < medium < high < critical
+      - id: resource-deletion
+        severity: critical                 # none < medium < high < critical
         match: { actions: [delete] }       # actions / types / targets only, each a list of strings
         verdict_on_match: ask              # hit (default) / ask / unverifiable
-        question: |
-          Is a running resource deleted or replaced? ...
+        instructions: |                    # the check, stated as a proposition
+          The change at `focus` removes or recreates a resource that serves requests.
+        criteria:
+          true: the action is destroy or replace, and the resource serves requests
+          false: anything else, including an add or change action
 ```
 
-- If `categories` is omitted, the built-in defaults are used. If present, it
+- If `aspects` is omitted, the built-in defaults are used. If present, it
   replaces them entirely — there is no merge.
-- `id` must be unique within categories and within checks. A duplicate id, an
-  invalid `level`, an unknown `match` key, or a check with neither `match` nor
-  `question` is a config error (`review` exits 2).
+- `id` must be unique within aspects and within checks. A duplicate id, an
+  invalid `severity`, an unknown `match` key, or a check with neither `match` nor
+  `instructions` is a config error (`review` exits 2).
 - The config's SHA-256 is mixed into the digest used to key incremental state.
 
 ### Check types
@@ -151,17 +175,39 @@ categories:
 | Type | Config | What it judges | LLM |
 | --- | --- | --- | --- |
 | A. Fact | `match` (`verdict_on_match: hit`) | A fact visible in the plan | Not used |
-| B. Interpretation | `question` only | Visible in the plan, but needs judgment | Used |
-| B′. Fact + interpretation | `match` + `question` + `verdict_on_match: ask` | What changed is deterministic; whether it is dangerous needs judgment | Used. If no answer comes back, the match result stands |
+| B. Interpretation | `instructions` only | Visible in the plan, but needs judgment | Used |
+| B′. Fact + interpretation | `match` + `instructions` + `verdict_on_match: ask` | What changed is deterministic; whether it is dangerous needs judgment | Used. If no answer comes back, the match result stands |
 | C. Unverifiable | `match` + `verdict_on_match: unverifiable` | The plan cannot show this in principle | Not used. Reports "unverifiable by plan" |
 
-`level` is always decided by the config. The LLM only returns hit / miss and a reason.
+`severity` is always decided by the config. The LLM only returns hit / miss and a reason.
 
-### Levels
+### Writing instructions and criteria
+
+A check is stated as a proposition, not asked as a question, because it is judged
+two ways: a prose judge returns hit / miss with a reason, and TypeSafe AI's System
+One (Jev) returns a probability and no text at all. `criteria` bounds the
+proposition — `true` lists what counts, `false` states the complement rather than
+more examples. A judge that answers with a score has nowhere to note an exception
+it spotted, so every exclusion has to be written down instead of left to its
+discretion. The prose form is derived from these two, so there is one text to keep
+correct rather than two that drift.
+
+`focus` refers to the change being judged: `focus.changed_keys` are the attributes
+whose value changed in this plan, `focus.after` the resulting attributes, and
+`focus.referred_by` the other changes that point at it. `before` is never sent, so
+whether a number or a string moved up or down is not recoverable — only that it
+changed.
+
+A score becomes a verdict at `llm.jev.hit_threshold` and `miss_threshold`; the band
+between them is undecided. The defaults are the band the API documentation uses in
+its examples, and are a starting point for `eval/` rather than a calibrated
+recommendation.
+
+### Severities
 
 The axes are recoverability and production impact.
 
-| Level | Criterion |
+| Severity | Criterion |
 | --- | --- |
 | `critical` | Cannot be undone, or takes production down |
 | `high` | Can be undone, but damage can go unnoticed for a while |
@@ -170,26 +216,27 @@ The axes are recoverability and production impact.
 
 ### Built-in default checks
 
-Provider-neutral, used when `.tfreview.yaml` has no `categories`.
+Provider-neutral, used when `.tfreview.yaml` has no `aspects`.
 
-| Category | Check | Type | Level |
+One scored check per aspect, plus the one rule a judge cannot improve on.
+
+| Aspect | Check | Type | Severity |
 | --- | --- | --- | --- |
-| destruction | delete-or-replace | B′ (`actions: [delete]` + ask) | critical |
+| resource-deletion | resource-deletion | B′ (`actions: [delete]` + ask) | critical |
 | data-loss | stateful-delete | A (`actions: [delete]` + major DB/storage types) | critical |
-| data-loss | guard-relaxed | B (force_destroy / deletion_protection etc. relaxed) | critical |
-| exposure | privilege-grant | B (privilege expansion, wildcards) | high |
-| exposure | public-exposure | B (0.0.0.0/0, public access) | high |
-| cost | recurring-charge | B (recurring charges increase) | high |
+| data-loss | data-loss | B (a data store destroyed, or a guard relaxed) | critical |
+| polp | polp | B (write access granted, wildcards, 0.0.0.0/0, public access) | high |
+| cost | cost | B (recurring charges increase) | high |
 
 `examples/aws.yaml` and `examples/gcp.yaml` are full, provider-specific configs
 you can copy to `.tfreview.yaml` and edit. Set `language: ja` to get the fixed
-comment text and LLM instructions in Japanese instead of English.
+comment text and judging instructions in Japanese instead of English.
 
 ## How it works
 
 1. `match` is evaluated for every check and every target — deterministic and
    free, so it always runs from scratch.
-2. For each target, checks left undecided by `match` (plain `question` checks,
+2. For each target, checks left undecided by `match` (plain `instructions` checks,
    and `ask` checks that matched) are sent to the LLM in a single call. If
    incremental state has a verdict for that target already (same plan +
    config digest), the call is skipped and the cached verdict is reused.
@@ -198,13 +245,13 @@ comment text and LLM instructions in Japanese instead of English.
 4. `ask` fallback: if any target's answer for a check came back missing, the
    whole check reverts to what `match` alone decided, so a real `miss` can't
    be pushed aside by another target's `skipped`.
-5. Scores aggregate by max: a category scores the max of its checks, the PR
-   scores the max of its categories.
+5. Scores aggregate by max: an aspect scores the max of its checks, the PR
+   scores the max of its aspects.
 
 If the LLM call fails, times out, or returns something that can't be parsed,
 every check for that target becomes `skipped` — the process never crashes.
 When any check is `skipped`, the comment says the verdict is incomplete and
-the label is `tfreview:unknown` instead of a level.
+the label is `tfreview:unknown` instead of a severity.
 
 Incremental state (`state.json`) keys verdicts by target, under the SHA-256 of
 that target's (reduced) plan JSON plus the config. A push that doesn't change

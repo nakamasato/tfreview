@@ -24,7 +24,7 @@ aspects:
         severity: critical
         match: {actions: [delete]}
         verdict_on_match: ask
-        question: deleted?
+        instructions: deleted?
       - id: shared
         severity: critical
         match: {targets: [shared]}
@@ -34,7 +34,7 @@ aspects:
     checks:
       - id: sg-open
         severity: high
-        question: open?
+        instructions: open?
 `
 
 func runCfgParsed(t *testing.T) *config.Config {
@@ -200,4 +200,90 @@ func checkIDs(cs []model.Check) []string {
 		out = append(out, c.ID)
 	}
 	return out
+}
+
+// recorder is a second-pass provider that records what it was asked and answers from a
+// fixed table, so the hand-off between the two passes can be checked without an API.
+type recorder struct {
+	answers map[string]llm.Answer
+	got     llm.Request
+	calls   int
+}
+
+func (r *recorder) Name() string  { return "recorder" }
+func (r *recorder) Model() string { return "recorder" }
+func (r *recorder) Judge(_ context.Context, req llm.Request) ([]llm.Answer, llm.Usage, error) {
+	r.calls++
+	r.got = req
+	var out []llm.Answer
+	for _, ck := range req.Checks {
+		if a, ok := r.answers[ck.ID]; ok {
+			out = append(out, a)
+		}
+	}
+	return out, llm.Usage{Calls: 1, InputTokens: 7}, nil
+}
+
+func deletePlan() []*plan.Plan {
+	return []*plan.Plan{{Target: "prd", Counts: plan.Counts{Destroy: 1}, Resources: []plan.Resource{
+		{Address: "aws_db_instance.main", Type: "aws_db_instance", Actions: []string{"delete"}},
+	}}}
+}
+
+func TestRunDeepDiveSettlesUndecided(t *testing.T) {
+	first := &mock.Provider{Answers: map[string][]llm.Answer{"prd": {
+		{CheckID: "delete-or-replace", Kind: model.VerdictUnverifiable, Reason: "scored 0.42", Resources: []string{"aws_db_instance.main"}, Score: 0.42},
+		{CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "nothing"},
+	}}}
+	deep := &recorder{answers: map[string]llm.Answer{
+		"delete-or-replace": {CheckID: "delete-or-replace", Kind: model.VerdictHit, Reason: "the alarm points at it"},
+	}}
+
+	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: deletePlan(), Provider: first, Deep: deep, HeadSHA: "h"})
+	require.NoError(t, err)
+
+	// Only the undecided check is looked at again, and it is told which change to open.
+	require.Len(t, deep.got.Checks, 1)
+	require.Equal(t, "delete-or-replace", deep.got.Checks[0].ID)
+	require.Equal(t, map[string][]string{"delete-or-replace": {"aws_db_instance.main"}}, deep.got.Focus)
+
+	v := out.Verdicts["delete-or-replace"]
+	require.Equal(t, model.VerdictHit, v.Kind)
+	require.Equal(t, "scored 0.42, then on a closer look: the alarm points at it", v.Reason)
+	// The first pass's score survives, since it is what the thresholds are tuned on.
+	require.Equal(t, 0.42, v.Score)
+	require.Equal(t, []string{"aws_db_instance.main"}, v.Resources)
+	require.Equal(t, model.VerdictMiss, out.Verdicts["sg-open"].Kind)
+	// Each pass is billed to its own provider, so the two are counted apart.
+	require.Equal(t, 1000, int(out.Usage.InputTokens))
+	require.Equal(t, 7, int(out.DeepUsage.InputTokens))
+}
+
+func TestRunDeepDiveSkippedKeepsTheFirstVerdict(t *testing.T) {
+	first := &mock.Provider{Answers: map[string][]llm.Answer{"prd": {
+		{CheckID: "delete-or-replace", Kind: model.VerdictUnverifiable, Reason: "scored 0.42", Resources: []string{"aws_db_instance.main"}},
+	}}}
+	deep := &recorder{answers: map[string]llm.Answer{
+		"delete-or-replace": {CheckID: "delete-or-replace", Kind: model.VerdictSkipped, Reason: "closer look failed"},
+	}}
+
+	out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: deletePlan(), Provider: first, Deep: deep, HeadSHA: "h"})
+	require.NoError(t, err)
+	// "needs a closer look" tells a reviewer more than "not evaluated", so a failed
+	// second pass must not overwrite it.
+	v := out.Verdicts["delete-or-replace"]
+	require.Equal(t, model.VerdictUnverifiable, v.Kind)
+	require.Equal(t, "scored 0.42", v.Reason)
+}
+
+func TestRunDeepDiveSkippedWithNothingToLookAt(t *testing.T) {
+	first := &mock.Provider{Answers: map[string][]llm.Answer{"prd": {
+		// Unverifiable with no resources means the plan cannot show this at all, which
+		// looking harder does not change.
+		{CheckID: "delete-or-replace", Kind: model.VerdictUnverifiable, Reason: "the plan cannot show it"},
+	}}}
+	deep := &recorder{}
+	_, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: deletePlan(), Provider: first, Deep: deep, HeadSHA: "h"})
+	require.NoError(t, err)
+	require.Zero(t, deep.calls)
 }
