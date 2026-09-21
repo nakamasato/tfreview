@@ -96,7 +96,7 @@ func newReviewCmd() *cobra.Command {
 			}
 			result := render.Build(cfg, out, render.Meta{
 				HeadSHA: headSHA, JudgedAt: now().UTC().Format(time.RFC3339), Repo: repo,
-				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing),
+				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil),
 			})
 
 			if err := os.MkdirAll(outDir, 0o755); err != nil {

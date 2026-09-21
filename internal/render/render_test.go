@@ -240,3 +240,26 @@ func TestBuildCarriesScore(t *testing.T) {
 	require.NotContains(t, string(b), `"score"`)
 	require.NotContains(t, string(b), `"resources"`)
 }
+
+func TestBuildPricesEachPassAtItsOwnRate(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	out.Usage = llm.Usage{Calls: 7, InputTokens: 1_000_000}
+	out.DeepUsage = llm.Usage{Calls: 4, InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	meta.Model, meta.Pricing = "jev-latest", llm.DefaultPricingFor("jev")
+	meta.DeepModel, meta.DeepPricing = "claude-opus-5", llm.DefaultPricing
+
+	r := Build(c, out, meta)
+	// 1M input at 0.042, plus 1M input at 5.00 and 1M output at 25.00.
+	require.InDelta(t, 0.042+5.00+25.00, r.CostUSD, 1e-9)
+
+	body := Comment(r)
+	require.Contains(t, body, "jev-latest · 7 calls")
+	require.Contains(t, body, "claude-opus-5 · 4 calls")
+}
+
+func TestFooterOmitsAnAbsentSecondPass(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	body := Comment(Build(c, out, meta))
+	footer := body[strings.Index(body, "<sub>"):]
+	require.Equal(t, 1, strings.Count(footer, " calls "), footer)
+}

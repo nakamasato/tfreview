@@ -254,8 +254,9 @@ func TestRunDeepDiveSettlesUndecided(t *testing.T) {
 	require.Equal(t, 0.42, v.Score)
 	require.Equal(t, []string{"aws_db_instance.main"}, v.Resources)
 	require.Equal(t, model.VerdictMiss, out.Verdicts["sg-open"].Kind)
-	// Both passes are billed: the mock's 1000 plus the second pass's 7.
-	require.Equal(t, 1007, int(out.Usage.InputTokens))
+	// Each pass is billed to its own provider, so the two are counted apart.
+	require.Equal(t, 1000, int(out.Usage.InputTokens))
+	require.Equal(t, 7, int(out.DeepUsage.InputTokens))
 }
 
 func TestRunDeepDiveSkippedKeepsTheFirstVerdict(t *testing.T) {

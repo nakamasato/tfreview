@@ -37,9 +37,12 @@ type Output struct {
 	Unevaluated map[string]bool
 	Targets     []TargetOutcome
 	Usage       llm.Usage
-	State       *state.State
-	NoPlans     bool
-	NoChanges   bool
+	// DeepUsage is the second pass, kept apart because it is billed by a different
+	// provider at rates that differ by orders of magnitude.
+	DeepUsage llm.Usage
+	State     *state.State
+	NoPlans   bool
+	NoChanges bool
 }
 
 func Run(ctx context.Context, in Input) (*Output, error) {
@@ -105,7 +108,7 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 			if in.Deep != nil {
 				var deepUsage llm.Usage
 				vs, deepUsage = deepen(ctx, in.Deep, p, llmChecks, vs, cfg.Language)
-				out.Usage.Add(deepUsage)
+				out.DeepUsage.Add(deepUsage)
 			}
 		}
 		out.State.Put(p.Target, digest, vs)
