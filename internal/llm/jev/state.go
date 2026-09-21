@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nakamasato/tfreview/internal/model"
 	"github.com/nakamasato/tfreview/internal/plan"
 )
 
@@ -166,4 +167,21 @@ func providerShortName(name string) string {
 		return name[i+1:]
 	}
 	return name
+}
+
+// Questions converts every check that states a proposition. A rule-only check is left
+// out: there is nothing for a judge to score.
+func Questions(checks []model.Check) map[string]Question {
+	out := map[string]Question{}
+	for _, ck := range checks {
+		if ck.Instructions == "" {
+			continue
+		}
+		q := Question{Type: "noul", Instructions: ck.Instructions}
+		if ck.Criteria != nil {
+			q.Criteria = &Criteria{True: ck.Criteria.True, False: ck.Criteria.False}
+		}
+		out[ck.ID] = q
+	}
+	return out
 }

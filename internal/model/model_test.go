@@ -64,3 +64,17 @@ func TestCheckpointZeroValue(t *testing.T) {
 		t.Errorf("Severity rank = %d, want %d", cp.Severity.Rank(), SeverityHigh.Rank())
 	}
 }
+
+func TestCheckProse(t *testing.T) {
+	ck := Check{
+		Instructions: "  The change at `focus` deletes a database.\n",
+		Criteria:     &Criteria{True: "the action is destroy", False: "anything else"},
+	}
+	require.Equal(t,
+		"The change at `focus` deletes a database. This holds when the action is destroy. It does not hold for anything else.",
+		ck.Prose())
+}
+
+func TestCheckProseWithoutCriteria(t *testing.T) {
+	require.Equal(t, "It deletes a database.", Check{Instructions: "It deletes a database.\n"}.Prose())
+}

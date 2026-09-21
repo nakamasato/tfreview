@@ -25,11 +25,12 @@ var cases = []struct {
 	want map[string]model.VerdictKind
 }{
 	{"rds-delete", map[string]model.VerdictKind{
-		"delete-or-replace": model.VerdictHit,
+		"resource-deletion": model.VerdictHit,
 		"stateful-delete":   model.VerdictHit,
+		"data-loss":         model.VerdictHit,
 	}},
 	{"open-ssh", map[string]model.VerdictKind{
-		"public-exposure": model.VerdictHit,
+		"polp": model.VerdictHit,
 	}},
 	{"tag-only", nil},
 	{"human-iam-revoke", nil},

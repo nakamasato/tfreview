@@ -6,44 +6,48 @@ llm:
   model: claude-opus-5
 
 aspects:
-  - id: destruction
-    title: Destruction / downtime
+  - id: resource-deletion
+    title: Resource deletion
     checks:
-      - id: delete-or-replace
+      - id: resource-deletion
         severity: critical
         match: { actions: [delete] }
         verdict_on_match: ask
-        question: |
-          Is a running resource deleted or replaced? Name it and say what becomes
-          unavailable. For IAM: removing a binding from `user:` does not count;
-          removing one from a `serviceAccount:` used by CI or a workload does, and so
-          does replacing an authoritative `google_*_iam_policy`. Read the principal
-          from the resource address (for_each key) and `after`.
         instructions: |
-          The change at `focus` deletes or replaces a resource that currently serves
-          traffic or holds state.
+          The change at `focus` removes or recreates a resource that serves requests,
+          holds state, or is depended on by another change in this plan.
         criteria:
           true: >-
-            the action is delete or replace, and the resource serves requests, stores
-            data, or is an authoritative google_*_iam_policy
+            the action is destroy or replace, and either `focus.referred_by` names
+            another change, or the resource type is one that serves requests or stores
+            data — a Compute instance, a Cloud SQL instance, a GCS bucket, a Pub/Sub
+            topic, a load balancer backend, a Cloud DNS record, a Cloud Run service, a
+            GKE node pool — or the resource is an authoritative google_*_iam_policy
           false: >-
-            the action is create or update, or the resource is an IAM binding whose
-            only member is a user: principal
+            anything else, including an add or change action, and a resource type that
+            only records or describes something, such as a label, a monitoring alert
+            policy, a log sink, or an IAM binding whose members are user: principals
 
-      # unverifiable: the plan cannot show whether an output change or resource
-      # replacement here breaks a downstream target's terraform_remote_state read,
-      # since the downstream plan did not run.
+      # unverifiable: the plan cannot show whether an output change or a replacement
+      # here breaks a downstream target's terraform_remote_state read, since that plan
+      # did not run.
       - id: shared-target
         severity: critical
         match: { targets: [shared, network-prd] }
         verdict_on_match: unverifiable
 
-      - id: cloud-run-downtime
+      - id: request-drop
         severity: high
-        question: |
-          Could a Cloud Run service or load balancer backend replacement drop
-          requests? Judge only from the plan (replaced resources, traffic split,
-          backend re-attachment). If you cannot tell, answer unverifiable.
+        instructions: |
+          The change at `focus` can drop in-flight requests while it is applied.
+        criteria:
+          true: >-
+            the action is replace on a Cloud Run service, a backend service, a URL map,
+            a forwarding rule or an instance group, or `focus.changed_keys` contains a
+            traffic split, a backend attachment or a health check
+          false: >-
+            anything else, including a resource that serves no traffic, and a change
+            that adds capacity without replacing what already serves
 
   - id: data-loss
     title: Data loss
@@ -53,56 +57,55 @@ aspects:
         match:
           actions: [delete]
           types: [google_sql_database_instance, google_storage_bucket, google_bigquery_dataset, google_bigquery_table, google_spanner_instance, google_firestore_database, google_redis_instance]
-        verdict_on_match: ask
-        question: |
-          Is a resource holding data deleted or replaced? Is there a recovery path?
 
-      - id: guard-relaxed
+      - id: data-loss
         severity: critical
-        question: |
-          Is deletion_protection, force_destroy, or a backup setting changed toward
-          the side that loses data? Decide from `changed_keys` only. If there are no
-          `changed_keys`, answer unverifiable.
-
-  - id: exposure
-    title: Permissions / exposure
-    checks:
-      - id: human-write-grant
-        severity: high
-        question: |
-          Is a write-capable role (roles/owner, roles/editor, *.admin,
-          roles/iam.securityAdmin, …) granted to a `user:` principal? `serviceAccount:`
-          does not count. Answer only whether it happens. Viewer roles do not count.
-        # Both exclusions the question words as asides become criteria.false here,
-        # because a score cannot carry "except when".
         instructions: |
-          The change at `focus` grants a write-capable role to a human principal.
+          The change at `focus` makes stored data easier to lose.
         criteria:
           true: >-
-            a member added in after is a user: principal, and the role confers write,
-            admin or owner capability
+            the action is destroy or replace on a resource type that stores persistent
+            data, or `focus.changed_keys` contains deletion_protection, force_destroy,
+            retention_policy or a backup configuration and `focus.after` gives that key
+            its permissive value — deletion_protection false, force_destroy true, a
+            retention of zero, backups disabled
           false: >-
-            every member added is a serviceAccount: or group: principal, or the role
-            is read-only such as roles/viewer or a *.viewer role
+            anything else, including a resource type that stores nothing, a guard whose
+            value in `focus.after` is the protective one, and a change with no
+            `focus.changed_keys` and no destroy or replace action
 
-      - id: firewall-open
+  - id: polp
+    title: Least privilege
+    checks:
+      - id: polp
         severity: high
-        question: |
-          Is 0.0.0.0/0 or ::/0 added to a firewall rule's source_ranges for an allow
-          rule? Which ports open? Decide from `changed_keys`.
-
-      - id: bucket-public
-        severity: high
-        question: |
-          Is allUsers or allAuthenticatedUsers granted on a bucket, or is
-          public_access_prevention relaxed? Decide from `changed_keys`.
+        instructions: |
+          The change at `focus` widens who can act on or reach the resource.
+        criteria:
+          true: >-
+            `focus.after` grants a role that confers write, admin or owner capability —
+            roles/owner, roles/editor, a *.admin role, roles/iam.securityAdmin — or
+            names allUsers or allAuthenticatedUsers, or adds 0.0.0.0/0 or ::/0 to an
+            allow rule's source_ranges, or relaxes public_access_prevention
+          false: >-
+            anything else, including a role that confers only read access such as
+            roles/viewer or a *.viewer role, source ranges limited to named CIDRs, and
+            a change that touches neither permissions nor network reachability
 
   - id: cost
     title: Cost
     checks:
-      - id: recurring-charge
+      - id: cost
         severity: high
-        question: |
-          Do recurring charges increase? Name the resource and attribute (machine
-          type, tier, disk size, min instances, a new always-on resource). Do not
-          state prices.
+        instructions: |
+          The change at `focus` raises what this project is billed every month.
+        criteria:
+          true: >-
+            the action is add on a Cloud SQL instance, a Compute instance, a GKE
+            cluster or node pool, a load balancer or a reserved address, or
+            `focus.changed_keys` contains machine_type, tier, disk_size_gb, node_count
+            or min_instance_count
+          false: >-
+            anything else, including a resource billed only per request such as a Cloud
+            Function or a Pub/Sub topic, and a change that touches only labels,
+            descriptions or names

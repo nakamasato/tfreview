@@ -22,12 +22,12 @@ aspects:
   - id: destruction
     title: Destruction / downtime
     checks:
-      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
+      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, instructions: q}
       - {id: shared, severity: critical, match: {targets: [shared]}, verdict_on_match: unverifiable}
   - id: exposure
     title: Permissions / exposure
     checks:
-      - {id: sg-open, severity: high, question: q}
+      - {id: sg-open, severity: high, instructions: q}
 `
 
 func fixture(t *testing.T, lang string) (*config.Config, *judge.Output, Meta) {

@@ -48,8 +48,8 @@ aspects:
   - id: destruction
     title: D
     checks:
-      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, question: q}
-      - {id: llm-only, severity: high, question: q}
+      - {id: delete-or-replace, severity: critical, match: {actions: [delete]}, verdict_on_match: ask, instructions: q}
+      - {id: llm-only, severity: high, instructions: q}
 `
 
 func TestExtractWritesPlan(t *testing.T) {
@@ -123,7 +123,7 @@ aspects:
     title: D
     checks:
       - {id: shared, severity: critical, match: {targets: [prd]}, verdict_on_match: unverifiable}
-      - {id: llm-only, severity: high, question: q}
+      - {id: llm-only, severity: high, instructions: q}
 `
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
@@ -213,7 +213,7 @@ aspects:
   - id: destruction
     title: D
     checks:
-      - {id: prod-only, severity: critical, match: {targets: [prod]}, verdict_on_match: ask, question: q}
+      - {id: prod-only, severity: critical, match: {targets: [prod]}, verdict_on_match: ask, instructions: q}
 `)
 	t.Setenv("TFREVIEW_ALLOW_MOCK", "1")
 	t.Setenv("TFREVIEW_MOCK_ANSWERS", `{}`)
@@ -230,7 +230,7 @@ aspects:
 func TestReviewWarnsWhenAnthropicKeyMissing(t *testing.T) {
 	dir := t.TempDir()
 	p := extractFixture(t, dir, "prd")
-	cfg := writeCfg(t, dir, "llm: {provider: anthropic}\naspects:\n  - id: destruction\n    title: D\n    checks:\n      - {id: llm-only, severity: high, question: q}\n")
+	cfg := writeCfg(t, dir, "llm: {provider: anthropic}\naspects:\n  - id: destruction\n    title: D\n    checks:\n      - {id: llm-only, severity: high, instructions: q}\n")
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	outDir := filepath.Join(dir, "out")
 

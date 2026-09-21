@@ -82,7 +82,7 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 
 	var llmChecks []model.Check
 	for _, ck := range checks {
-		if !ruleDecided[ck.ID] && ck.Question != "" {
+		if !ruleDecided[ck.ID] && ck.Instructions != "" {
 			llmChecks = append(llmChecks, ck)
 		}
 	}

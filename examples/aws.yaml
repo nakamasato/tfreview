@@ -5,64 +5,65 @@
 # match            deterministic condition. Only actions / types / targets, each a list
 #                  of strings.
 # verdict_on_match hit (default): match alone decides. ask: match only narrows the
-#                  candidates, the LLM decides; if no answer comes back, the match
+#                  candidates, the judge decides; if no answer comes back, the match
 #                  result stands. unverifiable: the plan cannot show this; report
 #                  "unverifiable by plan" instead of "no".
-# question         passed verbatim to a judge that answers in prose. Ask only what the
-#                  plan can show. To ask whether something was added or relaxed, make
-#                  it use `changed_keys` (attributes whose value changed in this plan).
-# instructions     the same check as a proposition, for a judge that scores it instead
-#                  of answering. `focus` refers to the change being judged. A few
-#                  checks below carry both; the rest show question alone.
-# criteria         true: / false: — what puts the proposition on each side. A score has
-#                  nowhere to record an exception, so every exclusion a question would
-#                  word as an aside belongs here.
+# instructions     the check as a proposition. `focus` refers to the change being
+#                  judged; `focus.changed_keys` are the attributes whose value changed
+#                  in this plan, `focus.referred_by` the other changes that point at it.
+# criteria         true: what counts. false: the complement, not more examples. A judge
+#                  that answers with a score cannot note an exception, so every
+#                  exclusion has to be stated here.
 language: en
 llm:
   provider: anthropic
   model: claude-opus-5
 
 aspects:
-  - id: destruction
-    title: Destruction / downtime
+  - id: resource-deletion
+    title: Resource deletion
     checks:
-      - id: delete-or-replace
+      - id: resource-deletion
         severity: critical
         match: { actions: [delete] }
         verdict_on_match: ask
-        question: |
-          Is a running resource deleted or replaced (forces replacement)? If so, name
-          it and say what becomes unavailable. Removing an IAM binding from a human
-          user does not count; removing one from a CI role or workload does. An
-          authoritative policy resource (aws_iam_policy body) being replaced counts.
         instructions: |
-          The change at `focus` deletes or replaces a resource that currently serves
-          traffic or holds state.
+          The change at `focus` removes or recreates a resource that serves requests,
+          holds state, or is depended on by another change in this plan.
         criteria:
           true: >-
-            the action is delete or replace, and the resource serves requests, stores
-            data, or is an authoritative aws_iam_policy body
+            the action is destroy or replace, and either `focus.referred_by` names
+            another change, or the resource type is one that serves requests or stores
+            data — an EC2 instance, an RDS instance, an S3 bucket, an SQS queue, an
+            ALB or NLB, a Route 53 record, an ECS service, an EKS node group — or the
+            resource is an authoritative aws_iam_policy body
           false: >-
-            the action is create or update, or the resource is an IAM binding for a
-            human user, a tag, or an alarm
+            anything else, including an add or change action, and a resource type that
+            only records or describes something, such as a tag, a CloudWatch alarm, a
+            log group subscription, or an IAM binding whose member is a human user
 
       # Targets whose outputs other targets read via terraform_remote_state, and whose
-      # downstream plans do not run in the same workflow. unverifiable: the plan
-      # cannot show whether an output change or resource replacement here breaks a
-      # downstream target's terraform_remote_state read, since the downstream plan
-      # did not run.
+      # downstream plans do not run in the same workflow. unverifiable: the plan cannot
+      # show whether an output change or a replacement here breaks a downstream
+      # target's terraform_remote_state read, since that plan did not run.
       - id: shared-target
         severity: critical
         match: { targets: [network-prd, shared] }
         verdict_on_match: unverifiable
 
-      - id: ecs-downtime
+      - id: request-drop
         severity: high
-        question: |
-          Could an ECS service, ALB, or target group replacement drop requests?
-          Judge only from what the plan shows (replaced resources, desired_count,
-          deployment settings, target group re-attachment). Do not estimate how long;
-          if you cannot tell, answer unverifiable and say what is missing.
+        instructions: |
+          The change at `focus` can drop in-flight requests while it is applied.
+        criteria:
+          true: >-
+            the action is replace on an ECS service, an ALB or NLB, a target group, a
+            listener or a launch template, or `focus.changed_keys` contains
+            desired_count, deployment_configuration, health_check or a target group
+            attachment
+          false: >-
+            anything else, including a resource that serves no traffic, and a change
+            that adds capacity without replacing what already serves
 
   - id: data-loss
     title: Data loss
@@ -72,73 +73,58 @@ aspects:
         match:
           actions: [delete]
           types: [aws_db_instance, aws_rds_cluster, aws_dynamodb_table, aws_s3_bucket, aws_efs_file_system, aws_elasticache_cluster]
-        verdict_on_match: ask
-        question: |
-          Is a resource holding data deleted or replaced? Is there a recovery path
-          (snapshot, versioning, backup)?
 
-      - id: guard-relaxed
+      - id: data-loss
         severity: critical
-        question: |
-          Is force_destroy, deletion_protection, skip_final_snapshot, or
-          backup_retention_period changed toward the side that loses data? Decide
-          from `changed_keys` only; a guard that was already relaxed does not count.
-          If there are no `changed_keys` (create/delete), answer unverifiable.
-        # The question's procedural asides are gone here: what a scored judge may look
-        # at is settled by what the state discloses, not by being told.
         instructions: |
-          A key in `focus.changed_keys` is a data-loss guard, and its value in
-          `focus.after` is now the permissive one.
+          The change at `focus` makes stored data easier to lose.
         criteria:
           true: >-
-            force_destroy, deletion_protection, skip_final_snapshot or
-            backup_retention_period is in changed_keys, and after holds
-            force_destroy true, deletion_protection false, skip_final_snapshot true,
-            or a shortened retention
+            the action is destroy or replace on a resource type that stores persistent
+            data, or `focus.changed_keys` contains force_destroy, deletion_protection,
+            skip_final_snapshot or backup_retention_period and `focus.after` gives that
+            key its permissive value — force_destroy true, deletion_protection false,
+            skip_final_snapshot true, a retention of zero
           false: >-
-            no guard key is in changed_keys, or the guard moved toward protection
+            anything else, including a resource type that stores nothing, a guard whose
+            value in `focus.after` is the protective one, and a change with no
+            `focus.changed_keys` and no destroy or replace action
 
-  - id: exposure
-    title: Permissions / exposure
+  - id: polp
+    title: Least privilege
     checks:
-      - id: iam-wildcard
+      - id: polp
         severity: high
-        question: |
-          Is a wildcard (*) added to an IAM policy Action or Resource? If so, which
-          role gains what? Decide from `changed_keys`; editing another attribute of a
-          policy that already had a wildcard does not count.
-
-      - id: trust-policy
-        severity: high
-        question: |
-          Is a principal added to a role's assume_role_policy? If so, who can now
-          assume it? If assume_role_policy is not in `changed_keys`, it did not change.
-
-      - id: human-write-grant
-        severity: high
-        question: |
-          Is a write-capable policy attached to an IAM user (not a role used by CI
-          or workloads)? Answer only whether it happens; do not excuse it because it
-          might be justified. Read-only policies (ReadOnlyAccess) do not count.
-
-      - id: sg-open
-        severity: high
-        question: |
-          Is 0.0.0.0/0 or ::/0 added to a security group ingress rule? Which ports
-          open to the internet? Decide from `changed_keys`.
-
-      - id: s3-public
-        severity: high
-        question: |
-          Is an S3 public access block relaxed, or a bucket policy changed to allow
-          anonymous access? Decide from `changed_keys`.
+        instructions: |
+          The change at `focus` widens who can act on or reach the resource.
+        criteria:
+          true: >-
+            a policy statement in `focus.after` confers write, delete or admin
+            capability on a named principal, or contains a wildcard in an Action or a
+            Resource, or a principal appears in an assume_role_policy, or
+            `focus.after` admits traffic from 0.0.0.0/0 or ::/0, or a public access
+            block has its blocking fields false, or a bucket policy names a wildcard
+            principal
+          false: >-
+            anything else, including a policy that confers only read access such as
+            ReadOnlyAccess or Get and List actions, ingress limited to named CIDRs or
+            security group ids, and a change that touches neither permissions nor
+            network reachability
 
   - id: cost
     title: Cost
     checks:
-      - id: recurring-charge
+      - id: cost
         severity: high
-        question: |
-          Do recurring charges increase? Name the resource and attribute
-          (instance_class, instance_type, allocated_storage, desired_count, a new NAT
-          gateway or load balancer). Do not state prices.
+        instructions: |
+          The change at `focus` raises what this account is billed every month.
+        criteria:
+          true: >-
+            the action is add on a NAT gateway, an ALB or NLB, an RDS instance, an EC2
+            instance, an EKS cluster or an Elastic IP, or `focus.changed_keys` contains
+            instance_class, instance_type, allocated_storage, desired_count or
+            node_count
+          false: >-
+            anything else, including a resource billed only per request such as a
+            Lambda function or an SQS queue, and a change that touches only tags,
+            descriptions or names

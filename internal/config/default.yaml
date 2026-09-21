@@ -1,19 +1,34 @@
+# One scored check per aspect. A check is stated as a proposition in `instructions`,
+# and `criteria` bounds it: `true` lists what counts, `false` states the complement
+# rather than more examples. A judge that answers with a score has nowhere to note an
+# exception, so anything a prose question would leave as an aside belongs in criteria.
 aspects:
-  - id: destruction
-    title: Destruction / downtime
+  - id: resource-deletion
+    title: Resource deletion
     checks:
-      - id: delete-or-replace
+      - id: resource-deletion
         severity: critical
         match: { actions: [delete] }
         verdict_on_match: ask
-        question: |
-          Does this plan delete or replace (forces replacement) a resource that is
-          currently serving traffic or holding state? If so, name the resource and
-          say what becomes unavailable. Removing an IAM binding from a human user
-          does not count; removing one from a CI or workload identity does.
+        instructions: |
+          The change at `focus` removes or recreates a resource that serves requests,
+          holds state, or is depended on by another change in this plan.
+        criteria:
+          true: >-
+            the action is destroy or replace, and either `focus.referred_by` names
+            another change, or the resource type is one that serves requests, stores
+            data or holds an identity others attach to — a compute instance, a
+            database, a bucket, a queue, a load balancer, a DNS record, a node pool
+          false: >-
+            anything else, including an add or change action, and a resource type that
+            only records or describes something, such as a tag, a monitoring alert, a
+            log subscription, or an IAM binding whose member is a human user
+
   - id: data-loss
     title: Data loss
     checks:
+      # A rule, not a proposition: the resource type and the action are the whole test,
+      # and a judge adds nothing to a list membership check.
       - id: stateful-delete
         severity: critical
         match:
@@ -35,38 +50,61 @@ aspects:
             - azurerm_mssql_database
             - azurerm_postgresql_flexible_server
             - azurerm_cosmosdb_account
-      - id: guard-relaxed
+
+      - id: data-loss
         severity: critical
-        question: |
-          Is any of force_destroy, deletion_protection, skip_final_snapshot,
-          backup_retention_period, or an equivalent guard changed toward the side
-          that makes data easier to lose? Decide only from `changed_keys`; a value
-          that was already relaxed before this change does not count. If a resource
-          has no `changed_keys` (create/delete), answer unverifiable.
-  - id: exposure
-    title: Permissions / exposure
+        instructions: |
+          The change at `focus` makes stored data easier to lose.
+        criteria:
+          true: >-
+            the action is destroy or replace on a resource type that stores persistent
+            data, or `focus.changed_keys` contains a guard such as force_destroy,
+            deletion_protection, skip_final_snapshot, prevent_destroy,
+            backup_retention_period or retention_policy and `focus.after` gives that
+            key its permissive value — force_destroy true, deletion_protection false,
+            skip_final_snapshot true, a retention of zero
+          false: >-
+            anything else, including a resource type that stores nothing, a guard whose
+            value in `focus.after` is the protective one, and a change with no
+            `focus.changed_keys` and no destroy or replace action
+
+  - id: polp
+    title: Least privilege
     checks:
-      - id: privilege-grant
+      - id: polp
         severity: high
-        question: |
-          Does this change grant write-capable permissions to a human principal,
-          add a wildcard (*) to an IAM action or resource, or add a principal to a
-          role's trust policy? Decide only from `changed_keys` and `after`. Do not
-          excuse a grant because it might be justified; only answer whether it happens.
-      - id: public-exposure
-        severity: high
-        question: |
-          Does this change open a resource to the internet: a security group or
-          firewall rule with 0.0.0.0/0 or ::/0 ingress, a public access block being
-          relaxed, a bucket or object policy allowing anonymous access, or a
-          load balancer / IP being made public? Decide only from `changed_keys`.
+        instructions: |
+          The change at `focus` widens who can act on or reach the resource.
+        criteria:
+          true: >-
+            `focus.after` confers create, write, update, delete or admin capability on
+            a named principal, or contains a wildcard in an action or a resource, or
+            admits traffic from 0.0.0.0/0 or ::/0, or names allUsers,
+            allAuthenticatedUsers or an anonymous principal, or turns off a public
+            access block, or marks a scheme or an address public or external
+          false: >-
+            anything else, including access that stays read-only such as viewer,
+            reader, get, list or describe, reachability limited to named CIDRs or
+            private ranges, and a change that touches neither permissions nor network
+            reachability
+
   - id: cost
     title: Cost
     checks:
-      - id: recurring-charge
+      # Whether a size or count grew or shrank is not recoverable: `before` never leaves
+      # the runner, so a key appearing in changed_keys is all there is. A downsize
+      # therefore scores like an increase, which is why this aspect is high, not critical.
+      - id: cost
         severity: high
-        question: |
-          Does this change increase recurring charges? Name the resource and the
-          attribute that drives it (instance size, storage size, desired count, a
-          new always-on resource such as a NAT gateway or load balancer). Do not
-          state prices; describe the scale only in terms visible in the plan.
+        instructions: |
+          The change at `focus` raises what this account is billed every month.
+        criteria:
+          true: >-
+            the action is add and the resource type bills a baseline whether or not it
+            is used — a NAT gateway, a load balancer, a database instance, a compute
+            instance, a cluster, a reserved address — or `focus.changed_keys` contains
+            an instance class, machine type, tier, storage size, node count or
+            desired count
+          false: >-
+            anything else, including a resource billed only per request with no
+            baseline, and a change that touches only tags, labels, descriptions or names

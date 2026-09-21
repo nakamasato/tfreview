@@ -24,7 +24,7 @@ aspects:
         severity: critical
         match: {actions: [delete]}
         verdict_on_match: ask
-        question: deleted?
+        instructions: deleted?
       - id: shared
         severity: critical
         match: {targets: [shared]}
@@ -34,7 +34,7 @@ aspects:
     checks:
       - id: sg-open
         severity: high
-        question: open?
+        instructions: open?
 `
 
 func runCfgParsed(t *testing.T) *config.Config {

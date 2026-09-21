@@ -62,7 +62,6 @@ type rawCheck struct {
 	Level          string         `yaml:"level"` // legacy; only to produce a migration error
 	Match          map[string]any `yaml:"match"`
 	VerdictOnMatch string         `yaml:"verdict_on_match"`
-	Question       string         `yaml:"question"`
 	Instructions   string         `yaml:"instructions"`
 	// A map rather than a struct because YAML reads a bare `true:` as a boolean key,
 	// which no struct field can be named after. Decoding into a string-keyed map
@@ -272,10 +271,8 @@ func convertCheck(r rawCheck) (model.Check, error) {
 	default:
 		return model.Check{}, errorf("check %q: unknown verdict_on_match %q (hit|ask|unverifiable)", r.ID, r.VerdictOnMatch)
 	}
-	// Either phrasing sends the check to a judge; which one is used depends on whether
-	// the judge answers in prose or in a score.
-	judged := r.Question != "" || r.Instructions != ""
-	if len(r.Criteria) > 0 && r.Instructions == "" {
+	judged := r.Instructions != ""
+	if len(r.Criteria) > 0 && !judged {
 		return model.Check{}, errorf("check %q: criteria bounds instructions, so it needs instructions", r.ID)
 	}
 	for k := range r.Criteria {
@@ -284,20 +281,20 @@ func convertCheck(r rawCheck) (model.Check, error) {
 		}
 	}
 	if m.IsZero() && !judged {
-		return model.Check{}, errorf("check %q: needs at least one of match, question or instructions", r.ID)
+		return model.Check{}, errorf("check %q: needs at least one of match or instructions", r.ID)
 	}
 	if m.IsZero() && on != model.OnMatchHit {
 		return model.Check{}, errorf("check %q: verdict_on_match %q requires match", r.ID, on)
 	}
 	if on == model.OnMatchAsk && !judged {
-		return model.Check{}, errorf("check %q: verdict_on_match ask requires question or instructions", r.ID)
+		return model.Check{}, errorf("check %q: verdict_on_match ask requires instructions", r.ID)
 	}
 	if !m.IsZero() && (on == model.OnMatchHit || on == model.OnMatchUnverifiable) && judged {
-		return model.Check{}, errorf("check %q: question and instructions have no effect with verdict_on_match %q; use ask or remove them", r.ID, on)
+		return model.Check{}, errorf("check %q: instructions have no effect with verdict_on_match %q; use ask or remove them", r.ID, on)
 	}
 	ck := model.Check{
 		ID: r.ID, Severity: severity, Match: m, OnMatch: on,
-		Question: r.Question, Instructions: r.Instructions, Requires: r.Requires,
+		Instructions: r.Instructions, Requires: r.Requires,
 	}
 	if len(r.Criteria) > 0 {
 		ck.Criteria = &model.Criteria{True: r.Criteria["true"], False: r.Criteria["false"]}

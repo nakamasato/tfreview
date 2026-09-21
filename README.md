@@ -15,7 +15,7 @@ the verdict you get on your laptop.
 - **Plan-only review.** The only input is the `terraform plan` result. No agent
   walks your repository, so verdicts are stable and each target costs one API call.
 - **Your criteria, in YAML.** What counts as dangerous lives in `.tfreview.yaml`.
-  Deterministic checks (`match`) and LLM checks (`question`) combine into four
+  Deterministic checks (`match`) and judged checks (`instructions`) combine into four
   check types; the config decides the severity, the LLM only says hit / miss.
 - **Incremental.** Verdicts are cached per target by the hash of plan + config. A
   push that does not change a target's plan re-uses its verdicts: no drift, no
@@ -134,27 +134,25 @@ llm:
     max_value_chars: 2000    # shorten long individual attribute values
     concurrency: 4           # scored checks in flight at once
 aspects:
-  - id: destruction
-    title: Destruction / downtime
+  - id: resource-deletion
+    title: Resource deletion
     checks:
-      - id: delete-or-replace
+      - id: resource-deletion
         severity: critical                 # none < medium < high < critical
         match: { actions: [delete] }       # actions / types / targets only, each a list of strings
         verdict_on_match: ask              # hit (default) / ask / unverifiable
-        question: |
-          Is a running resource deleted or replaced? ...
-        instructions: |                    # the same check, for a judge that scores
-          The change at `focus` deletes or replaces a resource that serves traffic.
+        instructions: |                    # the check, stated as a proposition
+          The change at `focus` removes or recreates a resource that serves requests.
         criteria:
-          true: the action is delete or replace, and the resource serves requests
-          false: the action is create or update, or the resource serves nothing
+          true: the action is destroy or replace, and the resource serves requests
+          false: anything else, including an add or change action
 ```
 
 - If `aspects` is omitted, the built-in defaults are used. If present, it
   replaces them entirely — there is no merge.
 - `id` must be unique within aspects and within checks. A duplicate id, an
-  invalid `severity`, an unknown `match` key, or a check with none of `match`,
-  `question` or `instructions` is a config error (`review` exits 2).
+  invalid `severity`, an unknown `match` key, or a check with neither `match` nor
+  `instructions` is a config error (`review` exits 2).
 - The config's SHA-256 is mixed into the digest used to key incremental state.
 
 ### Check types
@@ -162,26 +160,33 @@ aspects:
 | Type | Config | What it judges | LLM |
 | --- | --- | --- | --- |
 | A. Fact | `match` (`verdict_on_match: hit`) | A fact visible in the plan | Not used |
-| B. Interpretation | `question` only | Visible in the plan, but needs judgment | Used |
-| B′. Fact + interpretation | `match` + `question` + `verdict_on_match: ask` | What changed is deterministic; whether it is dangerous needs judgment | Used. If no answer comes back, the match result stands |
+| B. Interpretation | `instructions` only | Visible in the plan, but needs judgment | Used |
+| B′. Fact + interpretation | `match` + `instructions` + `verdict_on_match: ask` | What changed is deterministic; whether it is dangerous needs judgment | Used. If no answer comes back, the match result stands |
 | C. Unverifiable | `match` + `verdict_on_match: unverifiable` | The plan cannot show this in principle | Not used. Reports "unverifiable by plan" |
 
 `severity` is always decided by the config. The LLM only returns hit / miss and a reason.
 
-### Scored checks
+### Writing instructions and criteria
 
-`question` is addressed to a judge that answers in prose. `instructions` states
-the same check as a proposition for a judge that scores it — TypeSafe AI's System
-One (Jev) returns a probability and no text — and `criteria` says what puts the
-proposition on each side. A check can carry both; which one is used depends on
-the judge. Scoring is configurable but not yet selectable from `llm.provider`.
+A check is stated as a proposition, not asked as a question, because it is judged
+two ways: a prose judge returns hit / miss with a reason, and TypeSafe AI's System
+One (Jev) returns a probability and no text at all. `criteria` bounds the
+proposition — `true` lists what counts, `false` states the complement rather than
+more examples. A judge that answers with a score has nowhere to note an exception
+it spotted, so every exclusion has to be written down instead of left to its
+discretion. The prose form is derived from these two, so there is one text to keep
+correct rather than two that drift.
 
-A score becomes a verdict by `llm.jev.hit_threshold` and `miss_threshold`, so an
-exception has to be written into `criteria` rather than left to the judge's
-discretion — a probability has nowhere to record a caveat. A question referring
-to `focus` is aimed at the change being judged. The defaults are the band the
-API documentation uses in its examples; they are a starting point for
-`eval/`, not a calibrated recommendation.
+`focus` refers to the change being judged: `focus.changed_keys` are the attributes
+whose value changed in this plan, `focus.after` the resulting attributes, and
+`focus.referred_by` the other changes that point at it. `before` is never sent, so
+whether a number or a string moved up or down is not recoverable — only that it
+changed.
+
+A score becomes a verdict at `llm.jev.hit_threshold` and `miss_threshold`; the band
+between them is undecided. The defaults are the band the API documentation uses in
+its examples, and are a starting point for `eval/` rather than a calibrated
+recommendation.
 
 ### Severities
 
@@ -198,24 +203,25 @@ The axes are recoverability and production impact.
 
 Provider-neutral, used when `.tfreview.yaml` has no `aspects`.
 
+One scored check per aspect, plus the one rule a judge cannot improve on.
+
 | Aspect | Check | Type | Severity |
 | --- | --- | --- | --- |
-| destruction | delete-or-replace | B′ (`actions: [delete]` + ask) | critical |
+| resource-deletion | resource-deletion | B′ (`actions: [delete]` + ask) | critical |
 | data-loss | stateful-delete | A (`actions: [delete]` + major DB/storage types) | critical |
-| data-loss | guard-relaxed | B (force_destroy / deletion_protection etc. relaxed) | critical |
-| exposure | privilege-grant | B (privilege expansion, wildcards) | high |
-| exposure | public-exposure | B (0.0.0.0/0, public access) | high |
-| cost | recurring-charge | B (recurring charges increase) | high |
+| data-loss | data-loss | B (a data store destroyed, or a guard relaxed) | critical |
+| polp | polp | B (write access granted, wildcards, 0.0.0.0/0, public access) | high |
+| cost | cost | B (recurring charges increase) | high |
 
 `examples/aws.yaml` and `examples/gcp.yaml` are full, provider-specific configs
 you can copy to `.tfreview.yaml` and edit. Set `language: ja` to get the fixed
-comment text and LLM instructions in Japanese instead of English.
+comment text and judging instructions in Japanese instead of English.
 
 ## How it works
 
 1. `match` is evaluated for every check and every target — deterministic and
    free, so it always runs from scratch.
-2. For each target, checks left undecided by `match` (plain `question` checks,
+2. For each target, checks left undecided by `match` (plain `instructions` checks,
    and `ask` checks that matched) are sent to the LLM in a single call. If
    incremental state has a verdict for that target already (same plan +
    config digest), the call is skipped and the cached verdict is reused.
