@@ -22,3 +22,11 @@ func TestPricingFromMap(t *testing.T) {
 	require.Equal(t, DefaultPricing.CacheRead, p.CacheRead)
 	require.Equal(t, DefaultPricing, PricingFromMap(nil))
 }
+
+func TestPricingForProvider(t *testing.T) {
+	// A scoring judge's rate is two orders below a prose one and bills no output.
+	require.Equal(t, Pricing{Input: 0.042}, DefaultPricingFor("jev"))
+	require.Equal(t, DefaultPricing, DefaultPricingFor("anthropic"))
+	// An explicit llm.pricing still wins over the per-provider default.
+	require.Equal(t, 1.5, PricingFor("jev", map[string]float64{"input": 1.5}).Input)
+}

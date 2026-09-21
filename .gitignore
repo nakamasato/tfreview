@@ -1,5 +1,6 @@
 /dist/
 /tfreview
+/tfreview-out/
 *.test
 
 # local-only Claude Code files

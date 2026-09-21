@@ -87,7 +87,11 @@ names don't match a common naming convention.
 `--repo` defaults to the `GITHUB_REPOSITORY` environment variable, then the
 `origin` remote of the current directory (github.com only).
 
-Without `ANTHROPIC_API_KEY` set, `review` still runs, prints a warning to
+`llm.provider: jev` scores each change separately: one small call per change
+rather than one call per target, and it returns probabilities instead of prose, so
+a verdict's reason names the changes that scored and how high.
+
+Without the provider's API key set, `review` still runs, prints a warning to
 stderr, and labels the result `tfreview:unknown` since no LLM checks could be
 judged.
 
@@ -118,16 +122,16 @@ tests only) additionally requires the environment variable
 ```yaml
 language: en                 # default en. Language of the fixed comment text and LLM instructions
 llm:
-  provider: anthropic        # anthropic | claude-cli (the local `claude` CLI, no API key) | mock
+  provider: anthropic        # anthropic | claude-cli (the local `claude` CLI, no API key) | jev | mock
   model: claude-opus-5
   max_plan_chars: 100000     # skip the LLM call and mark every check unverifiable above this size
   max_tokens: 128000         # max_tokens for the judging call; lower it only for a model with a smaller output cap
-  pricing:                   # USD / Mtok, used only for the footer's cost estimate; built-in default if omitted
+  pricing:                   # USD / Mtok, used only for the footer's cost estimate; per-provider default if omitted
     input: 5.00
     cache_write: 6.25
     cache_read: 0.50
     output: 25.00
-  jev:                       # the scoring judge; see Scored checks below
+  jev:                       # llm.provider: jev. Needs TYPESAFE_API_KEY
     model: jev-latest
     hit_threshold: 0.70      # a score at or above this is a hit
     miss_threshold: 0.30     # at or below is a miss; the band between is undecided

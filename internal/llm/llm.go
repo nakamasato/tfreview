@@ -18,6 +18,9 @@ type Answer struct {
 	CheckID string
 	Kind    model.VerdictKind
 	Reason  string
+	// Score is the probability a scoring judge gave the check. It is 0 for a judge
+	// that answers in prose, so a reader has to know which provider produced it.
+	Score float64
 }
 
 type Usage struct {
@@ -46,8 +49,28 @@ type Pricing struct {
 
 var DefaultPricing = Pricing{Input: 5.00, CacheWrite: 6.25, CacheRead: 0.50, Output: 25.00}
 
+// A scoring judge is priced two orders of magnitude below a prose one and bills no
+// output at all, so reporting one provider's cost with the other's rates is off by
+// enough to mislead rather than merely approximate.
+var pricingByProvider = map[string]Pricing{
+	"jev": {Input: 0.042},
+}
+
+// DefaultPricingFor is the built-in estimate for a provider, used when the config
+// gives no `llm.pricing`.
+func DefaultPricingFor(provider string) Pricing {
+	if p, ok := pricingByProvider[provider]; ok {
+		return p
+	}
+	return DefaultPricing
+}
+
 func PricingFromMap(m map[string]float64) Pricing {
-	p := DefaultPricing
+	return PricingFor("", m)
+}
+
+func PricingFor(provider string, m map[string]float64) Pricing {
+	p := DefaultPricingFor(provider)
 	if v, ok := m["input"]; ok {
 		p.Input = v
 	}

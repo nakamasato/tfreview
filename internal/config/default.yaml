@@ -58,15 +58,13 @@ aspects:
         criteria:
           true: >-
             the action is destroy or replace on a resource type that stores persistent
-            data, or `focus.changed_keys` contains a guard such as force_destroy,
+            data, or `focus.changed_keys` names one of force_destroy,
             deletion_protection, skip_final_snapshot, prevent_destroy,
-            backup_retention_period or retention_policy and `focus.after` gives that
-            key its permissive value — force_destroy true, deletion_protection false,
-            skip_final_snapshot true, a retention of zero
+            backup_retention_period or retention_policy
           false: >-
-            anything else, including a resource type that stores nothing, a guard whose
-            value in `focus.after` is the protective one, and a change with no
-            `focus.changed_keys` and no destroy or replace action
+            anything else, including a resource type that stores nothing, and a change
+            whose `focus.changed_keys` is absent or names no guard while the action is
+            neither destroy nor replace
 
   - id: polp
     title: Least privilege
