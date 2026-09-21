@@ -232,7 +232,7 @@ func deletePlan() []*plan.Plan {
 
 func TestRunDeepDiveSettlesUndecided(t *testing.T) {
 	first := &mock.Provider{Answers: map[string][]llm.Answer{"prd": {
-		{CheckID: "delete-or-replace", Kind: model.VerdictUnverifiable, Reason: "scored 0.42", Resources: []string{"aws_db_instance.main"}},
+		{CheckID: "delete-or-replace", Kind: model.VerdictUnverifiable, Reason: "scored 0.42", Resources: []string{"aws_db_instance.main"}, Score: 0.42},
 		{CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "nothing"},
 	}}}
 	deep := &recorder{answers: map[string]llm.Answer{
@@ -247,8 +247,12 @@ func TestRunDeepDiveSettlesUndecided(t *testing.T) {
 	require.Equal(t, "delete-or-replace", deep.got.Checks[0].ID)
 	require.Equal(t, map[string][]string{"delete-or-replace": {"aws_db_instance.main"}}, deep.got.Focus)
 
-	require.Equal(t, model.VerdictHit, out.Verdicts["delete-or-replace"].Kind)
-	require.Equal(t, "the alarm points at it", out.Verdicts["delete-or-replace"].Reason)
+	v := out.Verdicts["delete-or-replace"]
+	require.Equal(t, model.VerdictHit, v.Kind)
+	require.Equal(t, "scored 0.42, then on a closer look: the alarm points at it", v.Reason)
+	// The first pass's score survives, since it is what the thresholds are tuned on.
+	require.Equal(t, 0.42, v.Score)
+	require.Equal(t, []string{"aws_db_instance.main"}, v.Resources)
 	require.Equal(t, model.VerdictMiss, out.Verdicts["sg-open"].Kind)
 	// Both passes are billed: the mock's 1000 plus the second pass's 7.
 	require.Equal(t, 1007, int(out.Usage.InputTokens))

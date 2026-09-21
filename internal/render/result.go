@@ -19,6 +19,10 @@ type CheckResult struct {
 	Verdict model.VerdictKind `json:"verdict"`
 	Reason  string            `json:"reason"`
 	Source  model.Source      `json:"source"`
+	// Score and Resources are set only by a scoring judge. They are what eval reads to
+	// calibrate the thresholds, so they are published rather than left in state.
+	Score     float64  `json:"score,omitempty"`
+	Resources []string `json:"resources,omitempty"`
 }
 
 type CategoryResult struct {
@@ -90,7 +94,7 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 			if v.Kind == model.VerdictHit || v.Kind == model.VerdictUnverifiable {
 				cr.Hits++
 			}
-			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Severity, Verdict: v.Kind, Reason: v.Reason, Source: v.Source})
+			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Severity, Verdict: v.Kind, Reason: v.Reason, Source: v.Source, Score: v.Score, Resources: v.Resources})
 		}
 		r.Categories = append(r.Categories, cr)
 	}

@@ -66,6 +66,10 @@ type Verdict struct {
 	Source    Source      `json:"source"`
 	Severity  Severity    `json:"severity,omitempty"`
 	Resources []string    `json:"resources,omitempty"`
+	// Score is the highest probability a scoring judge gave any change for this check.
+	// It is kept after a closer look settles the check, because what the first pass
+	// scored is what the thresholds are calibrated against.
+	Score float64 `json:"score,omitempty"`
 }
 
 type Match struct {

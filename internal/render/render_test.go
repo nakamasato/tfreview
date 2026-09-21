@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
@@ -219,4 +220,23 @@ func TestResultSaveLoad(t *testing.T) {
 	got, err := LoadResult(p)
 	require.NoError(t, err)
 	require.Equal(t, r, got)
+}
+
+func TestBuildCarriesScore(t *testing.T) {
+	c, out, meta := fixture(t, "en")
+	out.Verdicts["sg-open"] = model.Verdict{
+		CheckID: "sg-open", Kind: model.VerdictUnverifiable, Source: model.SourceLLM,
+		Reason: "needs a closer look", Score: 0.41, Resources: []string{"aws_security_group.web"},
+	}
+	r := Build(c, out, meta)
+	got := r.Categories[1].Checks[0]
+	require.Equal(t, 0.41, got.Score)
+	require.Equal(t, []string{"aws_security_group.web"}, got.Resources)
+
+	// A prose judge sets neither, and the fields stay out of the JSON rather than
+	// reading as a score of zero.
+	b, err := json.Marshal(r.Categories[0].Checks[0])
+	require.NoError(t, err)
+	require.NotContains(t, string(b), `"score"`)
+	require.NotContains(t, string(b), `"resources"`)
 }
