@@ -28,6 +28,11 @@ type Resource struct {
 	After         map[string]any `json:"after"`
 	ChangedKeys   []string       `json:"changed_keys,omitempty"`
 	UnknownKeys   []string       `json:"unknown_keys,omitempty"`
+	// Refs and ReferredBy hold only addresses this plan also changes. They come from
+	// the plan's configuration section today; nothing about the fields assumes that,
+	// so another source can fill them without changing what reads them.
+	Refs       []string `json:"refs,omitempty"`
+	ReferredBy []string `json:"referred_by,omitempty"`
 }
 
 type Plan struct {

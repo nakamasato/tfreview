@@ -26,6 +26,7 @@ type showJSON struct {
 			ReplacePaths   [][]any         `json:"replace_paths"`
 		} `json:"change"`
 	} `json:"resource_changes"`
+	Configuration configuration `json:"configuration"`
 }
 
 func Extract(raw []byte, target string) (*Plan, error) {
@@ -73,7 +74,21 @@ func Extract(raw []byte, target string) (*Plan, error) {
 		}
 		p.Resources = append(p.Resources, r)
 	}
+	attachRefs(p, show.Configuration)
 	return p, nil
+}
+
+func attachRefs(p *Plan, cfg configuration) {
+	inPlan := make(map[string]bool, len(p.Resources))
+	for _, r := range p.Resources {
+		inPlan[r.Address] = true
+	}
+	refs := cfg.graph(inPlan)
+	referredBy := reverse(refs)
+	for i := range p.Resources {
+		p.Resources[i].Refs = refs[p.Resources[i].Address]
+		p.Resources[i].ReferredBy = referredBy[p.Resources[i].Address]
+	}
 }
 
 // replace_paths is a list of attribute paths, each itself a list whose elements are

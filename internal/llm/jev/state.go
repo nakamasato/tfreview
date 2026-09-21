@@ -26,6 +26,8 @@ type Change struct {
 	ReplacePaths []string       `json:"replace_paths,omitempty"`
 	ChangedKeys  []string       `json:"changed_keys,omitempty"`
 	UnknownKeys  []string       `json:"unknown_keys,omitempty"`
+	Refs         []string       `json:"refs,omitempty"`
+	ReferredBy   []string       `json:"referred_by,omitempty"`
 	Tags         map[string]any `json:"tags,omitempty"`
 	Labels       map[string]any `json:"labels,omitempty"`
 	After        map[string]any `json:"after,omitempty"`
@@ -60,6 +62,8 @@ func BuildState(p *plan.Plan, focus int, disclose bool, maxValueChars int) State
 			ReplacePaths: r.ReplacePaths,
 			ChangedKeys:  r.ChangedKeys,
 			UnknownKeys:  r.UnknownKeys,
+			Refs:         r.Refs,
+			ReferredBy:   r.ReferredBy,
 			Tags:         asMap(r.After["tags"]),
 			Labels:       asMap(r.After["labels"]),
 		}
