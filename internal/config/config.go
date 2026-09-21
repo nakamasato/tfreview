@@ -34,6 +34,9 @@ type LLM struct {
 	MaxTokens     int                `yaml:"max_tokens"`
 	Pricing       map[string]float64 `yaml:"pricing"`
 	Jev           Jev                `yaml:"jev"`
+	// DeepDive names the provider that takes a second look at what the first pass left
+	// undecided. Empty leaves those checks unverifiable.
+	DeepDive string `yaml:"deep_dive"`
 }
 
 // Jev configures the scoring judge. Its thresholds turn a probability into a verdict:
@@ -133,6 +136,11 @@ func Parse(raw []byte) (*Config, error) {
 	case "anthropic", "claude-cli", "jev", "mock":
 	default:
 		return nil, errorf("llm.provider %q is not supported (anthropic|claude-cli|jev|mock)", c.LLM.Provider)
+	}
+	switch c.LLM.DeepDive {
+	case "", "anthropic":
+	default:
+		return nil, errorf("llm.deep_dive %q is not supported (anthropic)", c.LLM.DeepDive)
 	}
 	if c.LLM.Model == "" {
 		c.LLM.Model = "claude-opus-5"

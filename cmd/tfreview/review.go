@@ -71,6 +71,10 @@ func newReviewCmd() *cobra.Command {
 			if err != nil {
 				return &exitError{code: 2, msg: err.Error()}
 			}
+			deep, err := newDeepProvider(cfg)
+			if err != nil {
+				return &exitError{code: 2, msg: err.Error()}
+			}
 			// report-only tool: a missing key must not stop the run, but a silent
 			// tfreview:unknown with no explanation is worse than noise.
 			if key, ok := missingKey(cfg.LLM.Provider); !ok {
@@ -86,7 +90,7 @@ func newReviewCmd() *cobra.Command {
 				repo = gitRemoteRepo()
 			}
 
-			out, err := judge.Run(cmd.Context(), judge.Input{Config: cfg, Plans: ps, Provider: provider, Prev: state.Load(stateIn), HeadSHA: headSHA})
+			out, err := judge.Run(cmd.Context(), judge.Input{Config: cfg, Plans: ps, Provider: provider, Deep: deep, Prev: state.Load(stateIn), HeadSHA: headSHA})
 			if err != nil {
 				return err
 			}

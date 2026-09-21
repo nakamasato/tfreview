@@ -89,7 +89,17 @@ names don't match a common naming convention.
 
 `llm.provider: jev` scores each change separately: one small call per change
 rather than one call per target, and it returns probabilities instead of prose, so
-a verdict's reason names the changes that scored and how high.
+a verdict's reason names the changes that scored and how high. A score between the
+thresholds settles nothing, so the check comes back `unverifiable` naming the
+changes to look at rather than being reported as a miss.
+
+`llm.deep_dive: anthropic` then takes those changes and settles them. It runs a
+tool loop that reads the plan — one change's attributes, the changes that reference
+it, the plan filtered by type or action — and can put propositions of its own to
+the scoring judge, then reports a verdict with a reason in words. Its tools reach
+only into the plan and back into the scoring judge, never the repository or the
+network, so the plan stays the only input. It needs `ANTHROPIC_API_KEY`; without
+`deep_dive` the undecided checks stay `unverifiable`.
 
 Without the provider's API key set, `review` still runs, prints a warning to
 stderr, and labels the result `tfreview:unknown` since no LLM checks could be
@@ -131,6 +141,7 @@ llm:
     cache_write: 6.25
     cache_read: 0.50
     output: 25.00
+  deep_dive: ""              # "" (off) | anthropic. Takes a second look at what the first pass left undecided
   jev:                       # llm.provider: jev. Needs TYPESAFE_API_KEY
     model: jev-latest
     hit_threshold: 0.70      # a score at or above this is a hit

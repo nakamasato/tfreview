@@ -12,6 +12,9 @@ type Request struct {
 	Plan     *plan.Plan
 	Checks   []model.Check
 	Language string
+	// Focus names, per check id, the changes an earlier pass could not settle. A
+	// provider that judges the whole plan at once ignores it.
+	Focus map[string][]string
 }
 
 type Answer struct {
@@ -21,6 +24,9 @@ type Answer struct {
 	// Score is the probability a scoring judge gave the check. It is 0 for a judge
 	// that answers in prose, so a reader has to know which provider produced it.
 	Score float64
+	// Resources names the changes the answer rests on, which is what lets a later
+	// pass pick up where this one stopped.
+	Resources []string
 }
 
 type Usage struct {

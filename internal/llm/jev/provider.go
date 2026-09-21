@@ -191,11 +191,13 @@ func (p *Provider) answer(ck model.Check, best scored, hits, undecided, failures
 	case len(hits) > 0:
 		a.Kind = model.VerdictHit
 		a.Reason = "scored at or above the hit threshold: " + strings.Join(hits, ", ")
+		a.Resources = addresses(hits)
 	case len(undecided) > 0:
 		// Between the thresholds nothing is settled. Reporting it as unverifiable rather
 		// than a miss is what hands these changes to a closer look instead of burying them.
 		a.Kind = model.VerdictUnverifiable
 		a.Reason = "scored between the thresholds, needs a closer look: " + strings.Join(undecided, ", ")
+		a.Resources = addresses(undecided)
 	case len(failures) > 0 && best.address == "":
 		a.Kind = model.VerdictSkipped
 		a.Reason = "scoring failed for " + strings.Join(failures, ", ")
@@ -208,4 +210,17 @@ func (p *Provider) answer(ck model.Check, best scored, hits, undecided, failures
 		a.Reason += " (not scored: " + strings.Join(failures, ", ") + ")"
 	}
 	return a
+}
+
+// addresses strips the score off the "address (0.42)" form the reason uses, so a later
+// pass gets the addresses rather than having to read them back out of prose.
+func addresses(scored []string) []string {
+	out := make([]string, 0, len(scored))
+	for _, s := range scored {
+		if i := strings.LastIndex(s, " ("); i > 0 {
+			s = s[:i]
+		}
+		out = append(out, s)
+	}
+	return out
 }
