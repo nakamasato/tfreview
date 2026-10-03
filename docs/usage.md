@@ -82,8 +82,9 @@ artifact filenames do not follow the naming convention tfreview detects.
 
 For local iteration, `--provider claude-cli` uses an installed `claude` CLI
 instead of an API key. `--provider` and `--model` override the configured
-provider and model for one run. `--print debug` prints the plan attributes and
-verdicts used during a review.
+provider and model for one run. `--format json` writes the result JSON to
+stdout; `--format comment` writes the PR comment Markdown. `--debug` prints
+plan attributes, per-phase check results, and verdicts to stderr.
 
 When run locally, tfreview checks GitHub Releases for a newer version and
 prints an upgrade command to stderr when one is available. It skips this check
