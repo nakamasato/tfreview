@@ -1,303 +1,43 @@
 # tfreview
 
-A CLI and a GitHub Action that review a `terraform plan` against the risks *you*
-define, and post the verdict to the pull request as one comment and one
-`tfreview:*` label. The action runs the same CLI, so the verdict you get in CI is
-the verdict you get on your laptop.
+tfreview checks a Terraform plan against risks you define and reports the
+verdict on a pull request as one comment and one `tfreview:*` label. Its judge
+uses the plan as input, without reading repository files.
 
-> Status: alpha. Until `v1`, any release may contain breaking changes — to the
-> flags, the config schema, the output files, or the action inputs.
+Use it to catch risky infrastructure changes before they are applied. Simple
+rules are deterministic; checks that need context can be judged by an LLM. By
+default, tfreview reports findings without blocking a merge.
 
-<!-- screenshot of the comment: docs/comment.png (add after the first real run) -->
+> **Status:** alpha. Breaking changes may occur before v1.
 
-## Why tfreview
+## Install
 
-- **Plan-only review.** The only input is the `terraform plan` result. No agent
-  walks your repository, so verdicts are stable and each target costs one API call.
-- **Your criteria, in YAML.** What counts as dangerous lives in `.tfreview.yaml`.
-  Deterministic checks (`match`) and judged checks (`instructions`) combine into four
-  check types; the config decides the severity, the LLM only says hit / miss.
-- **Incremental.** Verdicts are cached per target by the hash of plan + config. A
-  push that does not change a target's plan re-uses its verdicts: no drift, no
-  extra cost.
-- **One comment, one label.** The comment is replaced in place, never stacked.
-  `tfreview:critical` on the PR list tells you where to look first.
-- **Many targets, one verdict.** Monorepos and multi-environment layouts are
-  judged together; the most dangerous target wins.
-- **Blocking is opt-in.** By default it only reports. `--fail-on critical` turns
-  it into a required check.
-- **Same verdict locally.** `tfreview fetch --pr N` pulls the plan CI already
-  produced, so you (or your AI agent) can review from a laptop.
+Download a binary from [Releases](https://github.com/nakamasato/tfreview/releases),
+or install with Go:
 
-## Quick start (GitHub Actions)
-
-```yaml
-name: tfreview
-on:
-  pull_request:
-
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
-jobs:
-  plan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: hashicorp/setup-terraform@v4
-
-      - run: terraform init
-      - run: terraform plan -out=tfplan
-      - run: terraform show -json tfplan > plan.json
-
-      - uses: nakamasato/tfreview@v0
-        with:
-          show-json: plan.json
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          fail-on: critical
+```sh
+go install github.com/nakamasato/tfreview/cmd/tfreview@latest
 ```
 
-Other inputs: `plan-json` (glob of plan JSON already reduced by `tfreview extract`;
-mutually exclusive with `show-json`) and `version` (the tfreview release to
-install; defaults to the tag the action itself was referenced by).
+## Quick start
 
-`show-json` takes a glob of `terraform show -json` outputs; the target name is
-the file name without extension (use one file per directory/environment for a
-monorepo). Without a `.tfreview.yaml` the built-in, provider-neutral checks are
-used. The action outputs `score`, `label`, `incomplete`, and `out-dir` for
-downstream steps.
+Create a Terraform plan JSON, reduce it, and review it locally:
 
-For local use, `tfreview fetch --pr N` downloads the plan JSON for that PR. It
-works out of the box with the `tfreview-plan` artifact the action uploads, and
-also auto-detects raw `terraform show -json` artifacts from other pipelines
-(running `extract` on them itself); use `--target-prefix` if your artifact
-names don't match a common naming convention.
-
-## CLI
-
-| Command | What it does |
-| --- | --- |
-| `tfreview extract --show-json plan.json --target prd --out prd.json` | Reduce `terraform show -json` to what review needs (`after` only, plus `changed_keys`; `before` never leaves the runner) |
-| `tfreview review --plan prd.json --plan dev.json [--state-in state.json] [--fail-on high]` | Judge; writes `result.json`, `comment.md`, `label.txt`, `state.json` |
-| `tfreview comment --pr 123 [--repo owner/name]` | Upsert the comment and set the label |
-| `tfreview fetch --pr 123 [--repo owner/name] [--out-dir DIR] [--artifact NAME] [--target-prefix STR]` | Download the plan JSON a CI run uploaded (`--out-dir` default `tfreview-plans`); auto-detects the artifact when `--artifact` is omitted |
-
-`--repo` defaults to the `GITHUB_REPOSITORY` environment variable, then the
-`origin` remote of the current directory (github.com only).
-
-`llm.provider: jev` scores each change separately: one small call per change
-rather than one call per target, and it returns probabilities instead of prose, so
-a verdict's reason names the changes that scored and how high. A score between the
-thresholds settles nothing, so the check comes back `unverifiable` naming the
-changes to look at rather than being reported as a miss.
-
-`llm.deep_dive: anthropic` then takes those changes and settles them. It runs a
-tool loop that reads the plan — one change's attributes, the changes that reference
-it, the plan filtered by type or action — and can put propositions of its own to
-the scoring judge, then reports a verdict with a reason in words. Its tools reach
-only into the plan and back into the scoring judge, never the repository or the
-network, so the plan stays the only input. It needs `ANTHROPIC_API_KEY`; without
-`deep_dive` the undecided checks stay `unverifiable`.
-
-Without the provider's API key set, `review` still runs, prints a warning to
-stderr, and labels the result `tfreview:unknown` since no LLM checks could be
-judged.
-
-`--format json` writes the result JSON to stdout; `--format comment` writes the
-PR comment Markdown. `--debug` writes a coloured, terminal-oriented view of the
-run to stderr: plan attributes, per-phase check results, and verdicts with hits
-first and misses collapsed to one line. `--provider` / `--model` override `llm.provider` /
-`llm.model` for a one-off run.
-
-`--provider claude-cli` judges through the local `claude` CLI instead of the
-API, so it needs no `ANTHROPIC_API_KEY` and is billed to the Claude
-subscription. It is for local iteration only — CI has no `claude` CLI.
-
-`--fail-on-rule-only` narrows `--fail-on` to verdicts a `match` decided
-(deterministic checks, or an `ask` check that fell back to its match result
-because the LLM didn't answer) — an LLM `hit` alone won't fail the build.
-
-Install: `go install github.com/nakamasato/tfreview/cmd/tfreview@latest` or the
-tarball from Releases.
-
-When running locally, tfreview checks GitHub Releases for a newer version and
-prints an upgrade command to stderr when one is available. The check is skipped
-in CI and can be disabled with `TFREVIEW_NO_UPDATE_CHECK=1`. Network errors do
-not affect command execution.
-
-## Configuration
-
-Everything lives in `.tfreview.yaml` at the repository root (override the path
-with `--config` / the action's `config` input). Without one, the built-in
-defaults below apply. `llm.provider: mock` (fixed verdicts, no API calls; for
-tests only) additionally requires the environment variable
-`TFREVIEW_ALLOW_MOCK=1`, so it can't accidentally run for real.
-
-```yaml
-language: en                 # default en. Language of the fixed comment text and LLM instructions
-llm:
-  provider: anthropic        # anthropic | claude-cli (the local `claude` CLI, no API key) | jev | mock
-  model: claude-opus-5
-  max_plan_chars: 100000     # skip the LLM call and mark every check unverifiable above this size
-  max_tokens: 128000         # max_tokens for the judging call; lower it only for a model with a smaller output cap
-  pricing:                   # USD / Mtok, used only for the footer's cost estimate; per-provider default if omitted
-    input: 5.00
-    cache_write: 6.25
-    cache_read: 0.50
-    output: 25.00
-  deep_dive: ""              # "" (off) | anthropic. Takes a second look at what the first pass left undecided
-  jev:                       # llm.provider: jev. Needs TYPESAFE_API_KEY
-    model: jev-latest
-    hit_threshold: 0.70      # a score at or above this is a hit
-    miss_threshold: 0.30     # at or below is a miss; the band between is undecided
-    max_value_chars: 2000    # shorten long individual attribute values
-    concurrency: 4           # scored checks in flight at once
-aspects:
-  - id: resource-deletion
-    title: Resource deletion
-    checks:
-      - id: resource-deletion
-        severity: critical                 # none < medium < high < critical
-        match: { actions: [delete] }       # actions / types / targets only, each a list of strings
-        verdict_on_match: ask              # hit (default) / ask / unverifiable
-        instructions: |                    # the check, stated as a proposition
-          The change at `focus` removes or recreates a resource that serves requests.
-        criteria:
-          true: the action is destroy or replace, and the resource serves requests
-          false: anything else, including an add or change action
+```sh
+terraform show -json tfplan > plan.json
+tfreview extract --show-json plan.json --target default --out default.json
+tfreview review --plan default.json
 ```
 
-- If `aspects` is omitted, the built-in defaults are used. If present, it
-  replaces them entirely — there is no merge.
-- `id` must be unique within aspects and within checks. A duplicate id, an
-  invalid `severity`, an unknown `match` key, or a check with neither `match` nor
-  `instructions` is a config error (`review` exits 2).
-- The config's SHA-256 is mixed into the digest used to key incremental state.
+To review pull requests in CI, add the
+[GitHub Action](https://github.com/nakamasato/tfreview) to a workflow and
+provide an LLM API key. The action can also fail a check at a chosen severity.
 
-### Check types
+## Docs
 
-| Type | Config | What it judges | LLM |
-| --- | --- | --- | --- |
-| A. Fact | `match` (`verdict_on_match: hit`) | A fact visible in the plan | Not used |
-| B. Interpretation | `instructions` only | Visible in the plan, but needs judgment | Used |
-| B′. Fact + interpretation | `match` + `instructions` + `verdict_on_match: ask` | What changed is deterministic; whether it is dangerous needs judgment | Used. If no answer comes back, the match result stands |
-| C. Unverifiable | `match` + `verdict_on_match: unverifiable` | The plan cannot show this in principle | Not used. Reports "unverifiable by plan" |
+- [GitHub Actions and CLI usage](docs/usage.md)
+- [Configuration and checks](docs/configuration.md)
+- [How verdicts and incremental state work](docs/how-it-works.md)
+- [Evaluation and limitations](docs/limitations.md)
 
-`severity` is always decided by the config. The LLM only returns hit / miss and a reason.
-
-### Writing instructions and criteria
-
-A check is stated as a proposition, not asked as a question, because it is judged
-two ways: a prose judge returns hit / miss with a reason, and TypeSafe AI's System
-One (Jev) returns a probability and no text at all. `criteria` bounds the
-proposition — `true` lists what counts, `false` states the complement rather than
-more examples. A judge that answers with a score has nowhere to note an exception
-it spotted, so every exclusion has to be written down instead of left to its
-discretion. The prose form is derived from these two, so there is one text to keep
-correct rather than two that drift.
-
-`focus` refers to the change being judged: `focus.changed_keys` are the attributes
-whose value changed in this plan, `focus.after` the resulting attributes, and
-`focus.referred_by` the other changes that point at it. `before` is never sent, so
-whether a number or a string moved up or down is not recoverable — only that it
-changed.
-
-A score becomes a verdict at `llm.jev.hit_threshold` and `miss_threshold`; the band
-between them is undecided. The defaults are the band the API documentation uses in
-its examples, and are a starting point for `eval/` rather than a calibrated
-recommendation.
-
-### Severities
-
-The axes are recoverability and production impact.
-
-| Severity | Criterion |
-| --- | --- |
-| `critical` | Cannot be undone, or takes production down |
-| `high` | Can be undone, but damage can go unnoticed for a while |
-| `medium` | Can be undone and the impact is contained |
-| `none` | Not applicable |
-
-### Built-in default checks
-
-Provider-neutral, used when `.tfreview.yaml` has no `aspects`.
-
-One scored check per aspect, plus the one rule a judge cannot improve on.
-
-| Aspect | Check | Type | Severity |
-| --- | --- | --- | --- |
-| resource-deletion | resource-deletion | B′ (`actions: [delete]` + ask) | critical |
-| data-loss | stateful-delete | A (`actions: [delete]` + major DB/storage types) | critical |
-| data-loss | data-loss | B (a data store destroyed, or a guard relaxed) | critical |
-| polp | polp | B (write access granted, wildcards, 0.0.0.0/0, public access) | high |
-| cost | cost | B (recurring charges increase) | high |
-
-`examples/aws.yaml` and `examples/gcp.yaml` are full, provider-specific configs
-you can copy to `.tfreview.yaml` and edit. Set `language: ja` to get the fixed
-comment text and judging instructions in Japanese instead of English.
-
-## How it works
-
-1. `match` is evaluated for every check and every target — deterministic and
-   free, so it always runs from scratch.
-2. For each target, checks left undecided by `match` (plain `instructions` checks,
-   and `ask` checks that matched) are sent to the LLM in a single call. If
-   incremental state has a verdict for that target already (same plan +
-   config digest), the call is skipped and the cached verdict is reused.
-3. The same check's verdicts across targets are merged, keeping the more
-   dangerous one: `hit` > `unverifiable` > `miss` > `skipped`.
-4. `ask` fallback: if any target's answer for a check came back missing, the
-   whole check reverts to what `match` alone decided, so a real `miss` can't
-   be pushed aside by another target's `skipped`.
-5. Scores aggregate by max: an aspect scores the max of its checks, the PR
-   scores the max of its aspects.
-
-If the LLM call fails, times out, or returns something that can't be parsed,
-every check for that target becomes `skipped` — the process never crashes.
-When any check is `skipped`, the comment says the verdict is incomplete and
-the label is `tfreview:unknown` instead of a severity.
-
-Incremental state (`state.json`) keys verdicts by target, under the SHA-256 of
-that target's (reduced) plan JSON plus the config. A push that doesn't change
-a target's plan or the config reuses its cached verdicts instead of calling
-the LLM again. `skipped` targets are never written to state, so a transient
-LLM failure doesn't get pinned for the life of the PR — the next run retries it.
-
-## Evaluating judgement quality
-
-`eval/cases/*.json` are labelled plan fixtures; `eval/eval_test.go` judges each
-one and scores the verdicts against the labels. A case lists only the checks
-expected to be anything other than `miss`, so a false positive on any other
-check fails it too.
-
-```
-TFREVIEW_EVAL=1 go test ./eval -v -count=1 -timeout 20m
-```
-
-It calls a real LLM, so it is skipped unless `TFREVIEW_EVAL=1` is set, and
-`-count=1` is required or Go serves a cached result instead of re-judging.
-`TFREVIEW_EVAL_MODEL` overrides the model. Only disagreements are printed,
-followed by the accuracy, token counts and cost.
-
-## Limitations
-
-- Anything not in the plan is not seen (workflow files, CODEOWNERS, removing
-  `prevent_destroy`).
-- The config comes from the PR branch. This is a review aid, not a defense
-  against a malicious insider.
-- LLM verdicts (🤖) can be wrong. Deterministic verdicts (🔧) cannot.
-- `extract` only removes attributes that Terraform itself marked
-  `sensitive` in the plan, and only at the top level: if just part of a
-  nested attribute is sensitive, the whole attribute is dropped rather than
-  partially masked. Anything Terraform did not mark `sensitive` — user data
-  scripts, policy documents, environment variables, and the like — passes
-  through to plan data unchanged and is sent to the configured LLM provider
-  even if it happens to contain secrets. Mark such attributes `sensitive =
-  true` in the provider/module, or exclude the resource from tfreview
-  (e.g. via `match.targets`), if this is a concern.
-
-## License
-
-MIT
+MIT License. See [LICENSE](LICENSE).
