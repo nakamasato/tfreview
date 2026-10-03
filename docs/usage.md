@@ -85,6 +85,11 @@ instead of an API key. `--provider` and `--model` override the configured
 provider and model for one run. `--print debug` prints the plan attributes and
 verdicts used during a review.
 
+When run locally, tfreview checks GitHub Releases for a newer version and
+prints an upgrade command to stderr when one is available. It skips this check
+in CI. Set `TFREVIEW_NO_UPDATE_CHECK=1` to disable it; network errors do not
+affect command execution.
+
 ## Commands
 
 | Command | Purpose |
