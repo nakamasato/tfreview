@@ -56,6 +56,24 @@ func Comment(r *Result) string {
 	}
 	b.WriteString("\n")
 
+	if len(r.PrimaryChecks) > 0 || len(r.DeepChecks) > 0 || r.DeepEnabled {
+		b.WriteString("<details><summary>LLM phases</summary>\n\n")
+		fmt.Fprintf(&b, "**Phase 1 · %s (%s)**\n\n", r.Provider, r.Model)
+		if r.Provider == "jev" {
+			b.WriteString("Jev result: `hit` = suspicious, `miss` = safe.\n\n")
+		}
+		writePhaseChecks(&b, r.PrimaryChecks)
+		if r.DeepEnabled || r.DeepUsage.Calls > 0 {
+			fmt.Fprintf(&b, "**Phase 2 · Anthropic Deep Dive (%s)**\n\n", r.DeepModel)
+			if len(r.DeepChecks) == 0 {
+				b.WriteString("Not called · no checks were sent to Anthropic in this run.\n\n")
+			} else {
+				writePhaseChecks(&b, r.DeepChecks)
+			}
+		}
+		b.WriteString("</details>\n\n")
+	}
+
 	fmt.Fprintf(&b, "<details><summary>%s</summary>\n\n| %s | %s | %s | %s |\n| --- | --- | --- | --- |\n", s.Checks, s.Check, s.Level, s.Verdict, s.Reason)
 	for _, c := range r.Categories {
 		for _, ck := range c.Checks {
@@ -78,18 +96,37 @@ func Comment(r *Result) string {
 		}
 	}
 	if r.Usage.Calls > 0 {
-		parts := []string{usageLine(r.Model, r.Usage, s)}
+		parts := []string{usageLine(r.Model, r.Usage, s, r.CostUSD-r.DeepCostUSD)}
 		if r.DeepUsage.Calls > 0 {
-			parts = append(parts, usageLine(r.DeepModel, r.DeepUsage, s))
+			parts = append(parts, usageLine(r.DeepModel, r.DeepUsage, s, r.DeepCostUSD))
+		} else if r.DeepEnabled {
+			parts = append(parts, fmt.Sprintf("Anthropic Deep Dive (%s): not called · 0 tokens · ≈ $0.0000", r.DeepModel))
 		}
-		fmt.Fprintf(&b, "<sub>%s · ≈ $%.4f</sub>\n", strings.Join(parts, " + "), r.CostUSD)
+		fmt.Fprintf(&b, "<sub>%s · total ≈ $%.4f</sub>\n", strings.Join(parts, " + "), r.CostUSD)
 	}
 	return wrap(b.String())
 }
 
-func usageLine(model string, u llm.Usage, s texts) string {
-	return fmt.Sprintf("%s · %d %s · in %s / cache write %s / cache read %s / out %s %s",
-		model, u.Calls, s.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), s.Tokens)
+func writePhaseChecks(b *strings.Builder, checks []PhaseCheck) {
+	if len(checks) == 0 {
+		b.WriteString("No checks evaluated in this phase.\n\n")
+		return
+	}
+	b.WriteString("| Check | Result | Score | Resources | Reason |\n| --- | --- | ---: | --- | --- |\n")
+	for _, ck := range checks {
+		score := "—"
+		if ck.Score > 0 {
+			score = fmt.Sprintf("%.2f", ck.Score)
+		}
+		resources := strings.Join(ck.Resources, ", ")
+		fmt.Fprintf(b, "| %s | %s | %s | %s | %s |\n", cell(ck.ID), ck.Verdict, score, cell(resources), cell(ck.Reason))
+	}
+	b.WriteString("\n")
+}
+
+func usageLine(model string, u llm.Usage, s texts, cost float64) string {
+	return fmt.Sprintf("%s · %d %s · in %s / cache write %s / cache read %s / out %s %s · ≈ $%.4f",
+		model, u.Calls, s.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), s.Tokens, cost)
 }
 
 // wrap closes the comment body between the Begin/End markers. Free text that

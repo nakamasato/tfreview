@@ -31,5 +31,5 @@ Judged at <relative-time datetime="2026-09-02T00:00:00Z">2026-09-02T00:00:00Z</r
 
 Criteria: [`.tfreview.yaml`](https://github.com/o/r/blob/abc1234def5678/.tfreview.yaml)
 
-<sub>claude-opus-5 · 2 calls · in 2,000 / cache write 0 / cache read 0 / out 200 tokens · ≈ $0.0150</sub>
+<sub>claude-opus-5 · 2 calls · in 2,000 / cache write 0 / cache read 0 / out 200 tokens · ≈ $0.0150 · total ≈ $0.0150</sub>
 <!-- tfreview:end -->

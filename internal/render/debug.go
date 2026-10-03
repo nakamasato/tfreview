@@ -70,12 +70,52 @@ func Debug(r *Result, plans []*plan.Plan, color bool) string {
 		fmt.Fprintf(&b, "  %s %s\n", p.dim(fmt.Sprintf("%-12s", "miss")), p.dim(strings.Join(missed, ", ")))
 	}
 
+	if len(r.PrimaryChecks) > 0 || len(r.DeepChecks) > 0 || r.DeepEnabled {
+		fmt.Fprintf(&b, "\n%s\n", p.bold("phases:"))
+		if r.Provider == "jev" {
+			fmt.Fprintf(&b, "  %s\n", p.dim("Jev result: hit = suspicious; miss = safe"))
+		}
+		writeDebugPhase(&b, p, fmt.Sprintf("%s (%s)", r.Provider, r.Model), r.PrimaryChecks)
+		if r.DeepEnabled || r.DeepUsage.Calls > 0 {
+			if len(r.DeepChecks) == 0 {
+				fmt.Fprintf(&b, "  %s %s\n", p.bold("Anthropic Deep Dive ("+r.DeepModel+")"), p.dim("not called; no checks were sent in this run"))
+			} else {
+				writeDebugPhase(&b, p, "Anthropic Deep Dive ("+r.DeepModel+")", r.DeepChecks)
+			}
+		}
+	}
 	if r.Usage.Calls > 0 {
 		u := r.Usage
 		fmt.Fprintf(&b, "\n%s\n", p.dim(fmt.Sprintf("usage: %s · %d calls · in %s / cache write %s / cache read %s / out %s tokens · ≈ $%.4f",
-			r.Model, u.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), r.CostUSD)))
+			r.Model, u.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), r.CostUSD-r.DeepCostUSD)))
+		if r.DeepUsage.Calls > 0 {
+			u = r.DeepUsage
+			fmt.Fprintf(&b, "%s\n", p.dim(fmt.Sprintf("usage: %s · %d calls · in %s / cache write %s / cache read %s / out %s tokens · ≈ $%.4f",
+				r.DeepModel, u.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), r.DeepCostUSD)))
+		} else if r.DeepEnabled {
+			fmt.Fprintf(&b, "%s\n", p.dim(fmt.Sprintf("usage: Anthropic Deep Dive (%s) · not called · 0 tokens · ≈ $0.0000", r.DeepModel)))
+		}
+		fmt.Fprintf(&b, "%s\n", p.dim(fmt.Sprintf("estimated total: $%.4f", r.CostUSD)))
 	}
 	return b.String()
+}
+
+func writeDebugPhase(b *strings.Builder, p palette, name string, checks []PhaseCheck) {
+	fmt.Fprintf(b, "  %s\n", p.bold(name+":"))
+	if len(checks) == 0 {
+		fmt.Fprintf(b, "    %s\n", p.dim("no checks evaluated"))
+		return
+	}
+	for _, ck := range checks {
+		detail := string(ck.Verdict)
+		if ck.Score > 0 {
+			detail += fmt.Sprintf(" %.2f", ck.Score)
+		}
+		if len(ck.Resources) > 0 {
+			detail += " [" + strings.Join(ck.Resources, ", ") + "]"
+		}
+		fmt.Fprintf(b, "    %s %s %s %s\n", p.verdict(ck.Verdict, string(ck.Verdict)), p.bold(ck.ID), p.dim(detail), ck.Reason)
+	}
 }
 
 // attrLines shows the attributes the check actually sees: changed_keys when the
