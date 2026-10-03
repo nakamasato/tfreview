@@ -41,6 +41,11 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version,
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if latest, ok := latestRelease(cmd.Context(), version); ok {
+				fmt.Fprintf(cmd.ErrOrStderr(), "A newer tfreview version is available: %s (you have %s). Upgrade with: go install github.com/nakamasato/tfreview/cmd/tfreview@%s\n", latest, version, latest)
+			}
+		},
 	}
 	root.AddCommand(newExtractCmd(), newReviewCmd(), newCommentCmd(), newFetchCmd())
 	return root
