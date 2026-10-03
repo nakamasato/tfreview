@@ -1,12 +1,16 @@
 # tfreview
 
 tfreview checks a Terraform plan against risks you define and reports the
-verdict on a pull request as one comment and one `tfreview:*` label. Its judge
-uses the plan as input, without reading repository files.
+verdict on a pull request as one comment and one `tfreview:*` label.
 
-Use it to catch risky infrastructure changes before they are applied. Simple
-rules are deterministic; checks that need context can be judged by an LLM. By
-default, tfreview reports findings without blocking a merge.
+## Why tfreview
+
+Infrastructure changes can cause outages, data loss, or unexpected cost. A
+Terraform plan shows what will change, but teams need a consistent way to flag
+the risks that matter to them before applying it. tfreview checks the plan
+against your rules, uses an LLM only when context is needed, and puts the
+result where the team reviews changes: on the pull request. It reports by
+default, so you can adopt it before making findings merge-blocking.
 
 > **Status:** alpha. Breaking changes may occur before v1.
 
