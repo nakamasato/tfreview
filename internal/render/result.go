@@ -40,6 +40,14 @@ type TargetResult struct {
 	Reused bool        `json:"reused"`
 }
 
+type PhaseCheck struct {
+	ID        string            `json:"id"`
+	Verdict   model.VerdictKind `json:"verdict"`
+	Score     float64           `json:"score,omitempty"`
+	Resources []string          `json:"resources,omitempty"`
+	Reason    string            `json:"reason"`
+}
+
 type Result struct {
 	Score       model.Severity   `json:"score"`
 	RuleScore   model.Severity   `json:"rule_score"`
@@ -51,6 +59,7 @@ type Result struct {
 	ConfigPath  string           `json:"config_path"`
 	Language    string           `json:"language"`
 	Model       string           `json:"model"`
+	Provider    string           `json:"provider"`
 	NoPlans     bool             `json:"no_plans"`
 	NoChanges   bool             `json:"no_changes"`
 	Categories  []CategoryResult `json:"categories"`
@@ -58,9 +67,13 @@ type Result struct {
 	Unevaluated []string         `json:"unevaluated"`
 	Usage       llm.Usage        `json:"usage"`
 	// DeepModel and DeepUsage are the second pass. CostUSD covers both.
-	DeepModel string    `json:"deep_model,omitempty"`
-	DeepUsage llm.Usage `json:"deep_usage"`
-	CostUSD   float64   `json:"cost_usd"`
+	DeepModel     string       `json:"deep_model,omitempty"`
+	DeepUsage     llm.Usage    `json:"deep_usage"`
+	DeepEnabled   bool         `json:"deep_enabled,omitempty"`
+	DeepCostUSD   float64      `json:"deep_cost_usd,omitempty"`
+	PrimaryChecks []PhaseCheck `json:"primary_checks,omitempty"`
+	DeepChecks    []PhaseCheck `json:"deep_checks,omitempty"`
+	CostUSD       float64      `json:"cost_usd"`
 }
 
 type Meta struct {
@@ -69,22 +82,31 @@ type Meta struct {
 	Repo        string
 	ConfigPath  string
 	Model       string
+	Provider    string
 	Pricing     llm.Pricing
 	DeepModel   string
+	DeepEnabled bool
 	DeepPricing llm.Pricing
 }
 
 func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 	r := &Result{
 		HeadSHA: meta.HeadSHA, JudgedAt: meta.JudgedAt, Repo: meta.Repo, ConfigPath: meta.ConfigPath,
-		Language: cfg.Language, Model: meta.Model, NoPlans: out.NoPlans, NoChanges: out.NoChanges,
+		Language: cfg.Language, Model: meta.Model, Provider: meta.Provider, NoPlans: out.NoPlans, NoChanges: out.NoChanges,
 		Usage: out.Usage, Unevaluated: []string{}, Targets: []TargetResult{}, Categories: []CategoryResult{},
+		DeepEnabled: meta.DeepEnabled,
 	}
+	r.PrimaryChecks = phaseChecks(out.PhaseVerdicts["primary"])
+	r.DeepChecks = phaseChecks(out.PhaseVerdicts["deep"])
 	r.CostUSD = out.Usage.Cost(meta.Pricing)
+	if meta.DeepEnabled {
+		r.DeepModel = meta.DeepModel
+	}
 	if out.DeepUsage.Calls > 0 {
 		r.DeepModel = meta.DeepModel
 		r.DeepUsage = out.DeepUsage
-		r.CostUSD += out.DeepUsage.Cost(meta.DeepPricing)
+		r.DeepCostUSD = out.DeepUsage.Cost(meta.DeepPricing)
+		r.CostUSD += r.DeepCostUSD
 	}
 	for _, t := range out.Targets {
 		r.Targets = append(r.Targets, TargetResult{Target: t.Target, Counts: t.Counts, Reused: t.Reused})
@@ -118,6 +140,20 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 		r.Label = "tfreview:" + string(r.Score)
 	}
 	return r
+}
+
+func phaseChecks(verdicts map[string]model.Verdict) []PhaseCheck {
+	ids := make([]string, 0, len(verdicts))
+	for id := range verdicts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	checks := make([]PhaseCheck, 0, len(ids))
+	for _, id := range ids {
+		v := verdicts[id]
+		checks = append(checks, PhaseCheck{ID: id, Verdict: v.Kind, Score: v.Score, Resources: v.Resources, Reason: v.Reason})
+	}
+	return checks
 }
 
 func (r *Result) Save(path string) error {

@@ -105,9 +105,10 @@ Without the provider's API key set, `review` still runs, prints a warning to
 stderr, and labels the result `tfreview:unknown` since no LLM checks could be
 judged.
 
-`--print debug` writes a coloured, terminal-oriented view of the run to stdout:
-the plan attributes each check was given, then the verdicts with hits first and
-misses collapsed to one line. `--provider` / `--model` override `llm.provider` /
+`--format json` writes the result JSON to stdout; `--format comment` writes the
+PR comment Markdown. `--debug` writes a coloured, terminal-oriented view of the
+run to stderr: plan attributes, per-phase check results, and verdicts with hits
+first and misses collapsed to one line. `--provider` / `--model` override `llm.provider` /
 `llm.model` for a one-off run.
 
 `--provider claude-cli` judges through the local `claude` CLI instead of the

@@ -40,17 +40,21 @@ type Output struct {
 	// DeepUsage is the second pass, kept apart because it is billed by a different
 	// provider at rates that differ by orders of magnitude.
 	DeepUsage llm.Usage
-	State     *state.State
-	NoPlans   bool
-	NoChanges bool
+	// PhaseVerdicts keeps each provider's check results before the next phase
+	// changes or replaces them.
+	PhaseVerdicts map[string]map[string]model.Verdict
+	State         *state.State
+	NoPlans       bool
+	NoChanges     bool
 }
 
 func Run(ctx context.Context, in Input) (*Output, error) {
 	cfg := in.Config
 	out := &Output{
-		Verdicts:    map[string]model.Verdict{},
-		Unevaluated: map[string]bool{},
-		State:       state.New(in.HeadSHA, cfg.Digest),
+		Verdicts:      map[string]model.Verdict{},
+		Unevaluated:   map[string]bool{},
+		State:         state.New(in.HeadSHA, cfg.Digest),
+		PhaseVerdicts: map[string]map[string]model.Verdict{"primary": {}, "deep": {}},
 	}
 	if in.Prev == nil {
 		in.Prev = state.New("", "")
@@ -95,6 +99,8 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 	}
 
 	candidates := map[string][]model.Verdict{}
+	primaryCandidates := map[string][]model.Verdict{}
+	deepCandidates := map[string][]model.Verdict{}
 	for i, p := range in.Plans {
 		digest := p.Digest()
 		var vs []model.Verdict
@@ -105,16 +111,29 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 			var usage llm.Usage
 			vs, usage = judgeTarget(ctx, in.Provider, llm.Request{Plan: p, Checks: llmChecks, Language: cfg.Language})
 			out.Usage.Add(usage)
+			for _, v := range vs {
+				primaryCandidates[v.CheckID] = append(primaryCandidates[v.CheckID], v)
+			}
 			if in.Deep != nil {
 				var deepUsage llm.Usage
-				vs, deepUsage = deepen(ctx, in.Deep, p, llmChecks, vs, cfg.Language)
+				var deepVs []model.Verdict
+				vs, deepVs, deepUsage = deepen(ctx, in.Deep, p, llmChecks, vs, cfg.Language)
 				out.DeepUsage.Add(deepUsage)
+				for _, v := range deepVs {
+					deepCandidates[v.CheckID] = append(deepCandidates[v.CheckID], v)
+				}
 			}
 		}
 		out.State.Put(p.Target, digest, vs)
 		for _, v := range vs {
 			candidates[v.CheckID] = append(candidates[v.CheckID], v)
 		}
+	}
+	for id, vs := range primaryCandidates {
+		out.PhaseVerdicts["primary"][id] = Merge(vs)
+	}
+	for id, vs := range deepCandidates {
+		out.PhaseVerdicts["deep"][id] = Merge(vs)
 	}
 
 	// Record incompleteness before merging: after merge, a skipped verdict loses to
@@ -206,7 +225,7 @@ func anyChanges(plans []*plan.Plan) bool {
 // deepen re-judges only what the first pass could not settle, and only while it named
 // the changes to look at. An unverifiable verdict with nothing to point at is a
 // statement that the plan cannot show this, which a closer look will not change.
-func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model.Check, vs []model.Verdict, language string) ([]model.Verdict, llm.Usage) {
+func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model.Check, vs []model.Verdict, language string) ([]model.Verdict, []model.Verdict, llm.Usage) {
 	focus := map[string][]string{}
 	for _, v := range vs {
 		if v.Kind == model.VerdictUnverifiable && len(v.Resources) > 0 {
@@ -214,7 +233,7 @@ func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model
 		}
 	}
 	if len(focus) == 0 {
-		return vs, llm.Usage{}
+		return vs, nil, llm.Usage{}
 	}
 	var undecided []model.Check
 	for _, ck := range checks {
@@ -242,5 +261,5 @@ func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model
 		}
 		out = append(out, v)
 	}
-	return out, usage
+	return out, deeper, usage
 }

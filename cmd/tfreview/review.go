@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -34,7 +35,8 @@ func newReviewCmd() *cobra.Command {
 		ruleOnly   bool
 		provider   string
 		llmModel   string
-		printOut   string
+		output     string
+		debugOut   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -96,7 +98,7 @@ func newReviewCmd() *cobra.Command {
 			}
 			result := render.Build(cfg, out, render.Meta{
 				HeadSHA: headSHA, JudgedAt: now().UTC().Format(time.RFC3339), Repo: repo,
-				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil),
+				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Provider: cfg.LLM.Provider, Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepEnabled: cfg.LLM.DeepDive != "", DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil),
 			})
 
 			if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -114,16 +116,27 @@ func newReviewCmd() *cobra.Command {
 			if err := out.State.Save(filepath.Join(outDir, "state.json")); err != nil {
 				return err
 			}
-			switch printOut {
+			switch output {
 			case "":
-			case "debug":
-				cmd.Println(render.Debug(result, ps, render.ColorEnabled()))
 			case "comment":
 				cmd.Println(render.Comment(result))
+			case "json":
+				formatted, err := json.MarshalIndent(result, "", "  ")
+				if err != nil {
+					return err
+				}
+				cmd.Println(string(formatted))
 			default:
-				return &exitError{code: 2, msg: "--print: unknown format " + printOut + " (debug|comment)"}
+				return &exitError{code: 2, msg: "--format: unknown format " + output + " (json|comment)"}
 			}
-			cmd.Printf("%s (%s)\n", result.Label, outDir)
+			if debugOut {
+				cmd.PrintErrln(render.Debug(result, ps, render.ColorEnabled()))
+			}
+			if output == "" {
+				cmd.Printf("%s (%s)\n", result.Label, outDir)
+			} else {
+				cmd.PrintErrf("%s (%s)\n", result.Label, outDir)
+			}
 			if result.Incomplete {
 				for _, line := range skippedSummaryLines(result) {
 					cmd.PrintErrln(line)
@@ -166,7 +179,8 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&ruleOnly, "fail-on-rule-only", false, "with --fail-on, count only deterministic (match) verdicts")
 	cmd.Flags().StringVar(&provider, "provider", "", "override llm.provider (anthropic|claude-cli|mock)")
 	cmd.Flags().StringVar(&llmModel, "model", "", "override llm.model")
-	cmd.Flags().StringVar(&printOut, "print", "", "also write the result to stdout (debug|comment)")
+	cmd.Flags().StringVar(&output, "format", "", "write the result to stdout as json or comment")
+	cmd.Flags().BoolVar(&debugOut, "debug", false, "write plan attributes and per-phase check details to stderr")
 	return cmd
 }
 
