@@ -71,8 +71,8 @@ type Result struct {
 	DeepUsage     llm.Usage    `json:"deep_usage"`
 	DeepEnabled   bool         `json:"deep_enabled,omitempty"`
 	DeepCostUSD   float64      `json:"deep_cost_usd,omitempty"`
-	PrimaryChecks []PhaseCheck `json:"primary_checks,omitempty"`
-	DeepChecks    []PhaseCheck `json:"deep_checks,omitempty"`
+	PrimaryChecks []PhaseCheck `json:"primary_checks"`
+	DeepChecks    []PhaseCheck `json:"deep_checks"`
 	CostUSD       float64      `json:"cost_usd"`
 }
 
