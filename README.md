@@ -121,6 +121,11 @@ because the LLM didn't answer) — an LLM `hit` alone won't fail the build.
 Install: `go install github.com/nakamasato/tfreview/cmd/tfreview@latest` or the
 tarball from Releases.
 
+When running locally, tfreview checks GitHub Releases for a newer version and
+prints an upgrade command to stderr when one is available. The check is skipped
+in CI and can be disabled with `TFREVIEW_NO_UPDATE_CHECK=1`. Network errors do
+not affect command execution.
+
 ## Configuration
 
 Everything lives in `.tfreview.yaml` at the repository root (override the path
