@@ -163,7 +163,7 @@ func TestCommentStructure(t *testing.T) {
 	require.True(t, len(body) > 0)
 	require.Contains(t, body, Begin)
 	require.Contains(t, body, End)
-	require.Contains(t, body, "## 🔴 Risk: critical — Destruction / downtime")
+	require.Contains(t, body, "## 🔴 Risk: critical\n")
 	require.Contains(t, body, "img.shields.io/badge/risk-critical-B60205")
 	require.Contains(t, body, `<relative-time datetime="2026-09-02T00:00:00Z">`)
 	require.Contains(t, body, "https://github.com/o/r/commit/abc1234def5678")

@@ -28,11 +28,11 @@ func Comment(r *Result) string {
 		if len(r.Unevaluated) > 0 {
 			suffix = " (" + strings.Join(r.Unevaluated, ", ") + ")"
 		}
-		fmt.Fprintf(&b, "## 🔵 %s: %s%s\n\n", s.Risk, s.Incomplete, suffix)
+		fmt.Fprintf(&b, "## 🔵 Risk: %s%s\n\n", s.Incomplete, suffix)
 	case r.Score == model.SeverityNone:
-		fmt.Fprintf(&b, "## 🟢 %s: none\n\n", s.Risk)
+		b.WriteString("## 🟢 Risk: none\n\n")
 	default:
-		fmt.Fprintf(&b, "## %s %s: %s — %s\n\n", severityEmoji[r.Score], s.Risk, r.Score, topCategory(r))
+		fmt.Fprintf(&b, "## %s Risk: %s\n\n", severityEmoji[r.Score], r.Score)
 	}
 
 	if r.NoPlans {
@@ -204,15 +204,6 @@ func usageLine(model string, u llm.Usage, s texts, cost float64) string {
 // reopen the marker-corruption bug by skipping escaping.
 func wrap(body string) string {
 	return Begin + "\n" + escapeHTMLComments(body) + End + "\n"
-}
-
-func topCategory(r *Result) string {
-	for _, c := range r.Categories {
-		if c.Score == r.Score {
-			return c.Title
-		}
-	}
-	return ""
 }
 
 func writeBadges(b *strings.Builder, r *Result) {

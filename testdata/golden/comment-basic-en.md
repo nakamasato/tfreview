@@ -1,5 +1,5 @@
 <!-- tfreview:begin -->
-## 🔴 Risk: critical — Destruction / downtime
+## 🔴 Risk: critical
 
 ![critical](https://img.shields.io/badge/risk-critical-B60205) ![Destruction / downtime](https://img.shields.io/badge/Destruction%20%2F%20downtime-1%2F2-B60205) ![Permissions / exposure](https://img.shields.io/badge/Permissions%20%2F%20exposure-0%2F1-0E8A16)
 
