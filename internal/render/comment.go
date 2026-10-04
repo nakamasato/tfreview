@@ -37,9 +37,7 @@ func Comment(r *Result) string {
 
 	if r.NoPlans {
 		b.WriteString(s.NoPlans + "\n\n")
-		b.WriteString("<sub>")
 		writeMeta(&b, r)
-		b.WriteString("</sub>\n\n")
 		return wrap(b.String())
 	}
 
@@ -48,9 +46,7 @@ func Comment(r *Result) string {
 	if r.NoChanges {
 		b.WriteString(s.NoChanges + "\n\n")
 		writeTargets(&b, r, s)
-		b.WriteString("<sub>")
 		writeMeta(&b, r)
-		b.WriteString("</sub>\n\n")
 		return wrap(b.String())
 	}
 
@@ -100,17 +96,15 @@ func Comment(r *Result) string {
 			fmt.Fprintf(&b, "%s: `%s`\n\n", s.Criteria, r.ConfigPath)
 		}
 	}
-	b.WriteString("<sub>")
 	if r.Usage.Calls > 0 {
-		fmt.Fprintf(&b, "**total cost**: $%.4f</sub>\n<sub>%s</sub>\n<sub>", r.CostUSD, usageLine(r.Model, r.Usage, s, r.CostUSD-r.DeepCostUSD))
+		fmt.Fprintf(&b, "<sub>**total cost**: $%.4f</sub>\n<sub>%s</sub>\n", r.CostUSD, usageLine(r.Model, r.Usage, s, r.CostUSD-r.DeepCostUSD))
 		if r.DeepUsage.Calls > 0 {
-			fmt.Fprintf(&b, "%s</sub>\n<sub>", usageLine(r.DeepModel, r.DeepUsage, s, r.DeepCostUSD))
+			fmt.Fprintf(&b, "<sub>%s</sub>\n", usageLine(r.DeepModel, r.DeepUsage, s, r.DeepCostUSD))
 		} else if r.DeepEnabled {
-			fmt.Fprintf(&b, "**%s**: not called · 0 tokens · ≈ $0.0000</sub>\n<sub>", r.DeepModel)
+			fmt.Fprintf(&b, "<sub>**%s**: not called · 0 tokens · ≈ $0.0000</sub>\n", r.DeepModel)
 		}
 	}
 	writeMeta(&b, r)
-	b.WriteString("</sub>\n\n")
 	return wrap(b.String())
 }
 
@@ -251,7 +245,7 @@ func writeMeta(b *strings.Builder, r *Result) {
 	if r.Repo != "" {
 		commit = fmt.Sprintf("[`%s`](https://github.com/%s/commit/%s)", short, r.Repo, r.HeadSHA)
 	}
-	fmt.Fprintf(b, "**time**: <relative-time datetime=\"%s\">%s</relative-time>, **commit**: %s.", r.JudgedAt, r.JudgedAt, commit)
+	fmt.Fprintf(b, "<sub>**review time**: <relative-time datetime=\"%s\">%s</relative-time></sub>\n<sub>**commit**: %s</sub>\n\n", r.JudgedAt, r.JudgedAt, commit)
 }
 
 func writeTargets(b *strings.Builder, r *Result, s texts) {
