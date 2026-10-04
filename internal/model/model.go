@@ -60,16 +60,25 @@ const (
 )
 
 type Verdict struct {
-	CheckID   string      `json:"check_id"`
-	Kind      VerdictKind `json:"verdict"`
-	Reason    string      `json:"reason"`
-	Source    Source      `json:"source"`
-	Severity  Severity    `json:"severity,omitempty"`
-	Resources []string    `json:"resources,omitempty"`
+	CheckID        string          `json:"check_id"`
+	Kind           VerdictKind     `json:"verdict"`
+	Reason         string          `json:"reason"`
+	Source         Source          `json:"source"`
+	Severity       Severity        `json:"severity,omitempty"`
+	Resources      []string        `json:"resources,omitempty"`
+	ResourceScores []ResourceScore `json:"resource_scores,omitempty"`
 	// Score is the highest probability a scoring judge gave any change for this check.
 	// It is kept after a closer look settles the check, because what the first pass
 	// scored is what the thresholds are calibrated against.
 	Score float64 `json:"score,omitempty"`
+}
+
+// ResourceScore is one scoring judge's probability for one check on one plan resource.
+type ResourceScore struct {
+	Target   string  `json:"target"`
+	Resource string  `json:"resource"`
+	Action   string  `json:"action"`
+	Score    float64 `json:"score"`
 }
 
 type Match struct {

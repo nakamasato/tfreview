@@ -21,8 +21,9 @@ type CheckResult struct {
 	Source  model.Source      `json:"source"`
 	// Score and Resources are set only by a scoring judge. They are what eval reads to
 	// calibrate the thresholds, so they are published rather than left in state.
-	Score     float64  `json:"score,omitempty"`
-	Resources []string `json:"resources,omitempty"`
+	Score          float64               `json:"score,omitempty"`
+	Resources      []string              `json:"resources,omitempty"`
+	ResourceScores []model.ResourceScore `json:"resource_scores,omitempty"`
 }
 
 type CategoryResult struct {
@@ -41,11 +42,12 @@ type TargetResult struct {
 }
 
 type PhaseCheck struct {
-	ID        string            `json:"id"`
-	Verdict   model.VerdictKind `json:"verdict"`
-	Score     float64           `json:"score,omitempty"`
-	Resources []string          `json:"resources,omitempty"`
-	Reason    string            `json:"reason"`
+	ID             string                `json:"id"`
+	Verdict        model.VerdictKind     `json:"verdict"`
+	Score          float64               `json:"score,omitempty"`
+	Resources      []string              `json:"resources,omitempty"`
+	ResourceScores []model.ResourceScore `json:"resource_scores,omitempty"`
+	Reason         string                `json:"reason"`
 }
 
 type Result struct {
@@ -67,26 +69,30 @@ type Result struct {
 	Unevaluated []string         `json:"unevaluated"`
 	Usage       llm.Usage        `json:"usage"`
 	// DeepModel and DeepUsage are the second pass. CostUSD covers both.
-	DeepModel     string       `json:"deep_model,omitempty"`
-	DeepUsage     llm.Usage    `json:"deep_usage"`
-	DeepEnabled   bool         `json:"deep_enabled,omitempty"`
-	DeepCostUSD   float64      `json:"deep_cost_usd,omitempty"`
-	PrimaryChecks []PhaseCheck `json:"primary_checks"`
-	DeepChecks    []PhaseCheck `json:"deep_checks"`
-	CostUSD       float64      `json:"cost_usd"`
+	DeepModel        string       `json:"deep_model,omitempty"`
+	DeepUsage        llm.Usage    `json:"deep_usage"`
+	DeepEnabled      bool         `json:"deep_enabled,omitempty"`
+	DeepCostUSD      float64      `json:"deep_cost_usd,omitempty"`
+	JevHitThreshold  float64      `json:"jev_hit_threshold,omitempty"`
+	JevMissThreshold float64      `json:"jev_miss_threshold,omitempty"`
+	PrimaryChecks    []PhaseCheck `json:"primary_checks"`
+	DeepChecks       []PhaseCheck `json:"deep_checks"`
+	CostUSD          float64      `json:"cost_usd"`
 }
 
 type Meta struct {
-	HeadSHA     string
-	JudgedAt    string
-	Repo        string
-	ConfigPath  string
-	Model       string
-	Provider    string
-	Pricing     llm.Pricing
-	DeepModel   string
-	DeepEnabled bool
-	DeepPricing llm.Pricing
+	HeadSHA          string
+	JudgedAt         string
+	Repo             string
+	ConfigPath       string
+	Model            string
+	Provider         string
+	Pricing          llm.Pricing
+	DeepModel        string
+	DeepEnabled      bool
+	DeepPricing      llm.Pricing
+	JevHitThreshold  float64
+	JevMissThreshold float64
 }
 
 func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
@@ -94,7 +100,8 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 		HeadSHA: meta.HeadSHA, JudgedAt: meta.JudgedAt, Repo: meta.Repo, ConfigPath: meta.ConfigPath,
 		Language: cfg.Language, Model: meta.Model, Provider: meta.Provider, NoPlans: out.NoPlans, NoChanges: out.NoChanges,
 		Usage: out.Usage, Unevaluated: []string{}, Targets: []TargetResult{}, Categories: []CategoryResult{},
-		DeepEnabled: meta.DeepEnabled,
+		DeepEnabled:     meta.DeepEnabled,
+		JevHitThreshold: meta.JevHitThreshold, JevMissThreshold: meta.JevMissThreshold,
 	}
 	r.PrimaryChecks = phaseChecks(out.PhaseVerdicts["primary"])
 	r.DeepChecks = phaseChecks(out.PhaseVerdicts["deep"])
@@ -126,7 +133,7 @@ func Build(cfg *config.Config, out *judge.Output, meta Meta) *Result {
 			if v.Kind == model.VerdictHit || v.Kind == model.VerdictUnverifiable {
 				cr.Hits++
 			}
-			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Severity, Verdict: v.Kind, Reason: v.Reason, Source: v.Source, Score: v.Score, Resources: v.Resources})
+			cr.Checks = append(cr.Checks, CheckResult{ID: ck.ID, Level: ck.Severity, Verdict: v.Kind, Reason: v.Reason, Source: v.Source, Score: v.Score, Resources: v.Resources, ResourceScores: v.ResourceScores})
 		}
 		r.Categories = append(r.Categories, cr)
 	}
@@ -151,7 +158,7 @@ func phaseChecks(verdicts map[string]model.Verdict) []PhaseCheck {
 	checks := make([]PhaseCheck, 0, len(ids))
 	for _, id := range ids {
 		v := verdicts[id]
-		checks = append(checks, PhaseCheck{ID: id, Verdict: v.Kind, Score: v.Score, Resources: v.Resources, Reason: v.Reason})
+		checks = append(checks, PhaseCheck{ID: id, Verdict: v.Kind, Score: v.Score, Resources: v.Resources, ResourceScores: v.ResourceScores, Reason: v.Reason})
 	}
 	return checks
 }

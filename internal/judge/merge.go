@@ -23,6 +23,11 @@ func Merge(vs []model.Verdict) model.Verdict {
 		}
 	}
 	winner := vs[winnerIdx]
+	var resourceScores []model.ResourceScore
+	for _, v := range vs {
+		resourceScores = append(resourceScores, v.ResourceScores...)
+	}
+	winner.ResourceScores = resourceScores
 	notes := map[string]bool{}
 	for i, v := range vs {
 		// Skip the winner itself, and skip any loser whose kind matches the winner's:

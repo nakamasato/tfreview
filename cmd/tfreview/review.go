@@ -35,6 +35,7 @@ func newReviewCmd() *cobra.Command {
 		ruleOnly   bool
 		provider   string
 		llmModel   string
+		deepDive   string
 		output     string
 		debugOut   bool
 	)
@@ -60,6 +61,12 @@ func newReviewCmd() *cobra.Command {
 			}
 			if llmModel != "" {
 				cfg.LLM.Model = llmModel
+			}
+			if deepDive != "" {
+				if deepDive != "anthropic" {
+					return &exitError{code: 2, msg: "--deep-dive must be anthropic"}
+				}
+				cfg.LLM.DeepDive = deepDive
 			}
 			var ps []*plan.Plan
 			for _, path := range plans {
@@ -98,7 +105,7 @@ func newReviewCmd() *cobra.Command {
 			}
 			result := render.Build(cfg, out, render.Meta{
 				HeadSHA: headSHA, JudgedAt: now().UTC().Format(time.RFC3339), Repo: repo,
-				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Provider: cfg.LLM.Provider, Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepEnabled: cfg.LLM.DeepDive != "", DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil),
+				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Provider: cfg.LLM.Provider, Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepEnabled: cfg.LLM.DeepDive != "", DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil), JevHitThreshold: cfg.LLM.Jev.HitThreshold, JevMissThreshold: cfg.LLM.Jev.MissThreshold,
 			})
 
 			if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -177,8 +184,9 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&repo, "repo", "", "owner/name, used only for links (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit 1 when the score reaches this level (medium|high|critical)")
 	cmd.Flags().BoolVar(&ruleOnly, "fail-on-rule-only", false, "with --fail-on, count only deterministic (match) verdicts")
-	cmd.Flags().StringVar(&provider, "provider", "", "override llm.provider (anthropic|claude-cli|mock)")
+	cmd.Flags().StringVar(&provider, "provider", "", "override llm.provider (anthropic|claude-cli|jev|mock)")
 	cmd.Flags().StringVar(&llmModel, "model", "", "override llm.model")
+	cmd.Flags().StringVar(&deepDive, "deep-dive", "", "override llm.deep_dive (anthropic)")
 	cmd.Flags().StringVar(&output, "format", "", "write the result to stdout as json or comment")
 	cmd.Flags().BoolVar(&debugOut, "debug", false, "write plan attributes and per-phase check details to stderr")
 	return cmd

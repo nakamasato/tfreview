@@ -190,6 +190,7 @@ func judgeTarget(ctx context.Context, provider llm.Provider, req llm.Request) ([
 				v.Kind = a.Kind
 				v.Reason = a.Reason
 				v.Resources = a.Resources
+				v.ResourceScores = a.ResourceScores
 				v.Score = a.Score
 			}
 		}
@@ -252,6 +253,7 @@ func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model
 		// "needs a closer look" is more use to a reviewer than "not evaluated".
 		if d, ok := byID[v.CheckID]; ok && d.Kind != model.VerdictSkipped {
 			d.Resources = v.Resources
+			d.ResourceScores = v.ResourceScores
 			d.Score = v.Score
 			// Keep the trail: a reviewer reading only the agent's conclusion cannot tell it
 			// was a second opinion on something the first pass could not settle.

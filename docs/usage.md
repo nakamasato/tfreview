@@ -80,6 +80,20 @@ artifact and raw `terraform show -json` artifacts from other pipelines. Use
 `--artifact` to select an artifact explicitly and `--target-prefix` when
 artifact filenames do not follow the naming convention tfreview detects.
 
+To review several historical PR plans locally and write an HTML report:
+
+```sh
+go run ./cmd/tfreview eval --repo acme/widgets --pr 123,456 --format html --out /tmp/review.html
+```
+
+`eval` uses saved GitHub Actions plan artifacts and the current config. It
+removes downloaded plans after the run; the report can still contain resource
+addresses and verdict reasons, so review it before sharing. The default report
+name (`tfreview-eval-<timestamp>.md` or `.html`) is ignored by Git. Use
+`--format markdown` for Markdown. Pass `--provider jev --deep-dive anthropic`
+to run Jev scoring followed by individual Anthropic judgments; `--model`
+selects the second-pass model.
+
 For local iteration, `--provider claude-cli` uses an installed `claude` CLI
 instead of an API key. `--provider` and `--model` override the configured
 provider and model for one run. `--format json` writes the result JSON to
@@ -99,3 +113,4 @@ affect command execution.
 | `tfreview review --plan prod.json [--plan staging.json]` | Judge one or more reduced plans. |
 | `tfreview comment --result result.json --pr 123` | Update a pull request comment and label. |
 | `tfreview fetch --pr 123` | Download a plan artifact from a pull request workflow. |
+| `tfreview eval --pr 123,456` | Review historical PR plans and write a local report. |
