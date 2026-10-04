@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1](https://github.com/nakamasato/tfreview/compare/v0.2.0...v0.2.1) (2026-10-04)
+
+
+### Features
+
+* add HTML output to review command ([#27](https://github.com/nakamasato/tfreview/issues/27)) ([d9e0386](https://github.com/nakamasato/tfreview/commit/d9e0386c234cadc9cb922b6e2612c5c00a55a61b))
+* notify when tfreview updates are available ([#23](https://github.com/nakamasato/tfreview/issues/23)) ([55c6fdb](https://github.com/nakamasato/tfreview/commit/55c6fdbea6317ab9417cbaac4cf092f28b9201e5))
+* show per-phase check results and usage ([#24](https://github.com/nakamasato/tfreview/issues/24)) ([2a01f32](https://github.com/nakamasato/tfreview/commit/2a01f32f0c999260f2bbade5be44d20048d8fc94))
+
 ## [0.2.0](https://github.com/nakamasato/tfreview/compare/v0.1.0...v0.2.0) (2026-09-21)
 
 
