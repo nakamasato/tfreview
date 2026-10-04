@@ -25,18 +25,20 @@ var now = time.Now
 
 func newReviewCmd() *cobra.Command {
 	var (
-		plans      []string
-		configPath string
-		stateIn    string
-		outDir     string
-		headSHA    string
-		repo       string
-		failOn     string
-		ruleOnly   bool
-		provider   string
-		llmModel   string
-		output     string
-		debugOut   bool
+		plans         []string
+		configPath    string
+		stateIn       string
+		outDir        string
+		headSHA       string
+		repo          string
+		failOn        string
+		ruleOnly      bool
+		provider      string
+		llmModel      string
+		deepDive      string
+		deepDiveModel string
+		output        string
+		debugOut      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -56,10 +58,22 @@ func newReviewCmd() *cobra.Command {
 				return err
 			}
 			if provider != "" {
-				cfg.LLM.Provider = provider
+				cfg.LLM.LightCheck.Provider = provider
 			}
 			if llmModel != "" {
-				cfg.LLM.Model = llmModel
+				cfg.LLM.LightCheck.Model = llmModel
+				if cfg.LLM.LightCheck.Provider == "jev" {
+					cfg.LLM.Jev.Model = llmModel
+				}
+			}
+			if deepDive != "" {
+				if deepDive != "anthropic" {
+					return &exitError{code: 2, msg: "--deep-dive must be anthropic"}
+				}
+				cfg.LLM.DeepCheck.Provider = deepDive
+			}
+			if deepDiveModel != "" {
+				cfg.LLM.DeepCheck.Model = deepDiveModel
 			}
 			var ps []*plan.Plan
 			for _, path := range plans {
@@ -79,7 +93,7 @@ func newReviewCmd() *cobra.Command {
 			}
 			// report-only tool: a missing key must not stop the run, but a silent
 			// tfreview:unknown with no explanation is worse than noise.
-			if key, ok := missingKey(cfg.LLM.Provider); !ok {
+			if key, ok := missingKey(cfg.LLM.LightCheck.Provider); !ok {
 				cmd.PrintErrf("warning: %s is not set; judged checks will be skipped and the result will be tfreview:unknown\n", key)
 			}
 			if headSHA == "" {
@@ -98,7 +112,7 @@ func newReviewCmd() *cobra.Command {
 			}
 			result := render.Build(cfg, out, render.Meta{
 				HeadSHA: headSHA, JudgedAt: now().UTC().Format(time.RFC3339), Repo: repo,
-				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Provider: cfg.LLM.Provider, Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepEnabled: cfg.LLM.DeepDive != "", DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil),
+				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Provider: cfg.LLM.LightCheck.Provider, Pricing: llm.PricingFor(cfg.LLM.LightCheck.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.DeepCheck.Model, DeepEnabled: cfg.LLM.DeepCheck.Provider != "", DeepPricing: llm.PricingFor(cfg.LLM.DeepCheck.Provider, nil), JevHitThreshold: cfg.LLM.Jev.HitThreshold, JevMissThreshold: cfg.LLM.Jev.MissThreshold,
 			})
 
 			if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -116,6 +130,17 @@ func newReviewCmd() *cobra.Command {
 			if err := out.State.Save(filepath.Join(outDir, "state.json")); err != nil {
 				return err
 			}
+			htmlPath := ""
+			if output == "html" {
+				html, err := render.HTML(result)
+				if err != nil {
+					return fmt.Errorf("render HTML review: %w", err)
+				}
+				htmlPath = filepath.Join(outDir, "review.html")
+				if err := os.WriteFile(htmlPath, []byte(html), 0o600); err != nil {
+					return err
+				}
+			}
 			switch output {
 			case "":
 			case "comment":
@@ -126,8 +151,9 @@ func newReviewCmd() *cobra.Command {
 					return err
 				}
 				cmd.Println(string(formatted))
+			case "html":
 			default:
-				return &exitError{code: 2, msg: "--format: unknown format " + output + " (json|comment)"}
+				return &exitError{code: 2, msg: "--format: unknown format " + output + " (json|comment|html)"}
 			}
 			if debugOut {
 				cmd.PrintErrln(render.Debug(result, ps, render.ColorEnabled()))
@@ -135,7 +161,11 @@ func newReviewCmd() *cobra.Command {
 			if output == "" {
 				cmd.Printf("%s (%s)\n", result.Label, outDir)
 			} else {
-				cmd.PrintErrf("%s (%s)\n", result.Label, outDir)
+				if htmlPath != "" {
+					cmd.PrintErrf("%s (%s; HTML: %s)\n", result.Label, outDir, htmlPath)
+				} else {
+					cmd.PrintErrf("%s (%s)\n", result.Label, outDir)
+				}
 			}
 			if result.Incomplete {
 				for _, line := range skippedSummaryLines(result) {
@@ -177,9 +207,15 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&repo, "repo", "", "owner/name, used only for links (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit 1 when the score reaches this level (medium|high|critical)")
 	cmd.Flags().BoolVar(&ruleOnly, "fail-on-rule-only", false, "with --fail-on, count only deterministic (match) verdicts")
-	cmd.Flags().StringVar(&provider, "provider", "", "override llm.provider (anthropic|claude-cli|mock)")
-	cmd.Flags().StringVar(&llmModel, "model", "", "override llm.model")
-	cmd.Flags().StringVar(&output, "format", "", "write the result to stdout as json or comment")
+	cmd.Flags().StringVar(&provider, "light-provider", "", "override llm.light_check.provider (anthropic|claude-cli|jev|mock)")
+	cmd.Flags().StringVar(&provider, "provider", "", "alias for --light-provider")
+	cmd.Flags().StringVar(&llmModel, "light-model", "", "override llm.light_check.model")
+	cmd.Flags().StringVar(&llmModel, "model", "", "alias for --light-model")
+	cmd.Flags().StringVar(&deepDive, "deep-provider", "", "override llm.deep_check.provider (anthropic)")
+	cmd.Flags().StringVar(&deepDive, "deep-dive", "", "alias for --deep-provider")
+	cmd.Flags().StringVar(&deepDiveModel, "deep-model", "", "override llm.deep_check.model")
+	cmd.Flags().StringVar(&deepDiveModel, "deep-dive-model", "", "alias for --deep-model")
+	cmd.Flags().StringVar(&output, "format", "", "write result to stdout as json/comment, or save review.html in --out-dir (html)")
 	cmd.Flags().BoolVar(&debugOut, "debug", false, "write plan attributes and per-phase check details to stderr")
 	return cmd
 }

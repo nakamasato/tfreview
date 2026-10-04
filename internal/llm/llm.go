@@ -26,7 +26,8 @@ type Answer struct {
 	Score float64
 	// Resources names the changes the answer rests on, which is what lets a later
 	// pass pick up where this one stopped.
-	Resources []string
+	Resources      []string
+	ResourceScores []model.ResourceScore
 }
 
 type Usage struct {

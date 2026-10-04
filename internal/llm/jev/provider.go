@@ -53,6 +53,7 @@ func (p *Provider) Model() string { return p.client.Model() }
 type scored struct {
 	score   float64
 	address string
+	action  string
 	err     error
 }
 
@@ -85,7 +86,7 @@ func (p *Provider) Judge(ctx context.Context, req llm.Request) ([]llm.Answer, ll
 	for _, u := range usages {
 		usage.Add(u)
 	}
-	return p.reduce(req.Checks, results), usage, nil
+	return p.reduce(req.Plan.Target, req.Checks, results), usage, nil
 }
 
 // ask sends one change. A request that does not fit is retried with the other changes
@@ -102,17 +103,17 @@ func (p *Provider) ask(ctx context.Context, pl *plan.Plan, i int, asked map[stri
 	out := map[string]scored{}
 	if err != nil {
 		for id := range asked {
-			out[id] = scored{address: pl.Resources[i].Address, err: err}
+			out[id] = scored{address: pl.Resources[i].Address, action: matrixAction(pl.Resources[i].Actions), err: err}
 		}
 		return out, llm.Usage{Calls: 1}
 	}
 	for id := range asked {
 		a, ok := resp.Answers[id]
 		if !ok {
-			out[id] = scored{address: pl.Resources[i].Address, err: fmt.Errorf("no answer for %q", id)}
+			out[id] = scored{address: pl.Resources[i].Address, action: matrixAction(pl.Resources[i].Actions), err: fmt.Errorf("no answer for %q", id)}
 			continue
 		}
-		out[id] = scored{score: a.Noul, address: pl.Resources[i].Address}
+		out[id] = scored{score: a.Noul, address: pl.Resources[i].Address, action: matrixAction(pl.Resources[i].Actions)}
 	}
 	return out, llm.Usage{Calls: 1, InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens}
 }
@@ -145,7 +146,7 @@ func matchesResource(ck model.Check, pl *plan.Plan, i int) bool {
 
 // reduce takes the highest score per check: one change carrying a risk is enough for the
 // check to hit, which is the same max that aggregates aspects and targets elsewhere.
-func (p *Provider) reduce(checks []model.Check, results []map[string]scored) []llm.Answer {
+func (p *Provider) reduce(target string, checks []model.Check, results []map[string]scored) []llm.Answer {
 	var out []llm.Answer
 	for _, ck := range checks {
 		if ck.Instructions == "" {
@@ -154,6 +155,7 @@ func (p *Provider) reduce(checks []model.Check, results []map[string]scored) []l
 		var best scored
 		var hits, undecided []string
 		var failures []string
+		var resourceScores []model.ResourceScore
 		asked := false
 		for _, byCheck := range results {
 			s, ok := byCheck[ck.ID]
@@ -165,6 +167,7 @@ func (p *Provider) reduce(checks []model.Check, results []map[string]scored) []l
 				failures = append(failures, s.address)
 				continue
 			}
+			resourceScores = append(resourceScores, model.ResourceScore{Target: target, Resource: s.address, Action: s.action, Score: s.score})
 			if s.score > best.score || best.address == "" {
 				best = s
 			}
@@ -178,13 +181,28 @@ func (p *Provider) reduce(checks []model.Check, results []map[string]scored) []l
 		if !asked {
 			continue
 		}
-		out = append(out, p.answer(ck, best, hits, undecided, failures))
+		out = append(out, p.answer(ck, best, hits, undecided, failures, resourceScores))
 	}
 	return out
 }
 
-func (p *Provider) answer(ck model.Check, best scored, hits, undecided, failures []string) llm.Answer {
-	a := llm.Answer{CheckID: ck.ID, Score: best.score}
+func matrixAction(actions []string) string {
+	switch plan.Kind(actions) {
+	case "add":
+		return "create"
+	case "change":
+		return "update"
+	case "destroy":
+		return "destroy"
+	case "replace":
+		return "replace"
+	default:
+		return strings.Join(actions, "+")
+	}
+}
+
+func (p *Provider) answer(ck model.Check, best scored, hits, undecided, failures []string, resourceScores []model.ResourceScore) llm.Answer {
+	a := llm.Answer{CheckID: ck.ID, Score: best.score, ResourceScores: resourceScores}
 	sort.Strings(hits)
 	sort.Strings(undecided)
 	switch {

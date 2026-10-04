@@ -10,8 +10,9 @@ Here is a small example:
 ```yaml
 language: en
 llm:
-  provider: anthropic # anthropic | claude-cli | jev | mock
-  model: claude-opus-5
+  light_check:
+    provider: anthropic # anthropic | claude-cli | jev | mock
+    model: claude-sonnet-5-5
 aspects:
   - id: resource-deletion
     title: Resource deletion
@@ -29,13 +30,19 @@ aspects:
 ```
 
 The full configuration also supports language, model limits, pricing for the
-cost estimate, a second-pass deep dive, and Jev scoring options:
+cost estimate, a second-pass check, and Jev scoring options. Each phase has
+its own provider and model: `light_check` runs first and `deep_check` handles
+individual judgments for undecided results.
 
 ```yaml
 language: en
 llm:
-  provider: anthropic
-  model: claude-opus-5
+  light_check:
+    provider: jev
+    model: jev-latest
+  deep_check:
+    provider: anthropic
+    model: claude-sonnet-5-5
   max_plan_chars: 100000
   max_tokens: 128000
   pricing: # USD per million tokens; used for the comment estimate
@@ -43,9 +50,7 @@ llm:
     cache_write: 6.25
     cache_read: 0.50
     output: 25.00
-  deep_dive: "" # "" (off) | anthropic
-  jev: # used when provider: jev; requires TYPESAFE_API_KEY
-    model: jev-latest
+  jev: # used when light_check.provider: jev; requires TYPESAFE_API_KEY
     hit_threshold: 0.70
     miss_threshold: 0.30
     max_value_chars: 2000
@@ -123,5 +128,5 @@ See [`examples/aws.yaml`](../examples/aws.yaml) and
 points. Set `language: ja` for Japanese fixed comment text and judging
 instructions.
 
-Use `llm.provider: mock` only for tests. It requires `TFREVIEW_ALLOW_MOCK=1`
+Use `llm.light_check.provider: mock` only for tests. It requires `TFREVIEW_ALLOW_MOCK=1`
 as an additional safeguard.

@@ -14,7 +14,7 @@ const (
 	End   = "<!-- tfreview:end -->"
 )
 
-var severityEmoji = map[model.Severity]string{model.SeverityNone: "🟢", model.SeverityMedium: "🟡", model.SeverityHigh: "🟠", model.SeverityCritical: "🔴"}
+var severityEmoji = map[model.Severity]string{model.SeverityNone: "🟢", model.SeverityMedium: "🟡", model.SeverityHigh: "🔴", model.SeverityCritical: "🔴"}
 
 func Comment(r *Result) string {
 	s := t(r.Language)
@@ -60,13 +60,14 @@ func Comment(r *Result) string {
 		b.WriteString("<details><summary>LLM phases</summary>\n\n")
 		fmt.Fprintf(&b, "**Phase 1 · %s (%s)**\n\n", r.Provider, r.Model)
 		if r.Provider == "jev" {
-			b.WriteString("Jev result: `hit` = suspicious, `miss` = safe.\n\n")
+			fmt.Fprintf(&b, "Jev cost: ≈ $%.4f · score ≤ %.2f = likely safe · score ≥ %.2f = likely risk · middle scores need review.\n\n", r.CostUSD-r.DeepCostUSD, r.JevMissThreshold, r.JevHitThreshold)
+			writeJevMatrix(&b, r.PrimaryChecks, r.JevMissThreshold, r.JevHitThreshold)
 		}
 		writePhaseChecks(&b, r.PrimaryChecks)
 		if r.DeepEnabled || r.DeepUsage.Calls > 0 {
 			fmt.Fprintf(&b, "**Phase 2 · Anthropic Deep Dive (%s)**\n\n", r.DeepModel)
 			if len(r.DeepChecks) == 0 {
-				b.WriteString("Not called · no checks were sent to Anthropic in this run.\n\n")
+				b.WriteString(phase2NotRunReason(r) + "\n\n")
 			} else {
 				writePhaseChecks(&b, r.DeepChecks)
 			}
@@ -122,6 +123,71 @@ func writePhaseChecks(b *strings.Builder, checks []PhaseCheck) {
 		fmt.Fprintf(b, "| %s | %s | %s | %s | %s |\n", cell(ck.ID), ck.Verdict, score, cell(resources), cell(ck.Reason))
 	}
 	b.WriteString("\n")
+}
+
+func writeJevMatrix(b *strings.Builder, checks []PhaseCheck, missThreshold, hitThreshold float64) {
+	type row struct {
+		target, resource, action string
+		values                   []string
+	}
+	var perspectives []string
+	rows := make([]row, 0)
+	indices := make(map[string]int)
+	for _, check := range checks {
+		perspectives = append(perspectives, check.ID)
+		for _, score := range check.ResourceScores {
+			key := score.Target + "\x00" + score.Resource
+			index, ok := indices[key]
+			if !ok {
+				index = len(rows)
+				indices[key] = index
+				rows = append(rows, row{target: score.Target, resource: score.Resource, action: score.Action, values: make([]string, len(checks))})
+			}
+			icon := "🟡"
+			if score.Score <= missThreshold {
+				icon = "🟢"
+			} else if score.Score >= hitThreshold {
+				icon = "🔴"
+			}
+			rows[index].values[len(perspectives)-1] = fmt.Sprintf("%s %.2f", icon, score.Score)
+		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+	b.WriteString("**Jev resource × perspective scores**\n\n")
+	b.WriteString("| Terraform resource | Action |")
+	for _, perspective := range perspectives {
+		fmt.Fprintf(b, " %s |", cell(perspective))
+	}
+	b.WriteString("\n| --- | --- |")
+	for range perspectives {
+		b.WriteString(" ---: |")
+	}
+	b.WriteString("\n")
+	for _, item := range rows {
+		fmt.Fprintf(b, "| %s<br><sub>%s</sub> | %s |", cell(item.resource), cell(item.target), cell(item.action))
+		for _, value := range item.values {
+			fmt.Fprintf(b, " %s |", value)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+}
+
+func phase2NotRunReason(r *Result) string {
+	if !r.DeepEnabled {
+		return "Not run · no second-pass LLM is configured; set `llm.deep_check.provider: anthropic` to enable individual judgments."
+	}
+	for _, check := range r.PrimaryChecks {
+		if check.Verdict == model.VerdictUnverifiable && len(check.Resources) > 0 {
+			return "Not run · a second-pass provider is configured, but no individual judgments were recorded."
+		}
+	}
+	if r.Provider == "jev" {
+		return "Not run · no Jev score fell between the miss and hit thresholds for a resource requiring investigation."
+	}
+	return "Not run · the primary judge produced no checks requiring a second opinion."
 }
 
 func usageLine(model string, u llm.Usage, s texts, cost float64) string {
