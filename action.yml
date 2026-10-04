@@ -31,6 +31,10 @@ inputs:
     description: Post the comment and label to the PR
     required: false
     default: "true"
+  approve:
+    description: Approve the PR when every check is clear (needs pull-requests:write and "Allow GitHub Actions to create and approve pull requests")
+    required: false
+    default: "false"
   version:
     description: tfreview release to install (default = the tag this action was referenced by)
     required: false
@@ -162,7 +166,11 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         OUT: ${{ steps.review.outputs.out-dir }}
         PR: ${{ github.event.pull_request.number }}
-      run: tfreview comment --result "$OUT/result.json" --pr "$PR" --repo "$GITHUB_REPOSITORY"
+        APPROVE: ${{ inputs.approve }}
+      run: |
+        approve=""
+        [ "$APPROVE" = "true" ] && approve="--approve"
+        tfreview comment --result "$OUT/result.json" --pr "$PR" --repo "$GITHUB_REPOSITORY" $approve
 
     - name: Save state
       if: github.event_name == 'pull_request' && steps.review.outputs.out-dir != ''

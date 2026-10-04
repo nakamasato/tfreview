@@ -66,6 +66,14 @@ To post or update a pull request comment and label, run:
 tfreview comment --result tfreview-out/result.json --pr 123 --repo owner/name
 ```
 
+Add `--approve` (action input `approve: true`) to also approve the pull request
+when the review is complete and every check is clear. The token needs
+`pull-requests: write`, and for `GITHUB_TOKEN` the repository setting "Allow
+GitHub Actions to create and approve pull requests" must be on. The approval is
+pinned to the reviewed commit and is never withdrawn by tfreview; enable
+"Dismiss stale pull request approvals" in branch protection so a later push
+needs a fresh review.
+
 `--repo` defaults to `GITHUB_REPOSITORY`, then the current directory's GitHub
 `origin` remote. Set `GITHUB_TOKEN` for authentication.
 

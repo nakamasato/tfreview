@@ -50,6 +50,12 @@ type PhaseCheck struct {
 	Reason         string                `json:"reason"`
 }
 
+// Clear reports a fully evaluated review with no finding at all; only then is
+// it safe to approve automatically.
+func (r *Result) Clear() bool {
+	return r.Score == model.SeverityNone && !r.Incomplete && !r.NoPlans
+}
+
 type Result struct {
 	Score       model.Severity   `json:"score"`
 	RuleScore   model.Severity   `json:"rule_score"`
