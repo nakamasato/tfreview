@@ -3,24 +3,48 @@
 tfreview checks a Terraform plan against risks you define and reports the
 verdict on a pull request as one comment and one `tfreview:*` label.
 
+## How it reviews
+
+```mermaid
+flowchart LR
+    plan["terraform plan<br/>(per target)"] --> extract["extract<br/>keep after + changed keys"]
+    extract --> cache{"plan + config<br/>hash unchanged?"}
+    cache -- yes --> merge
+    cache -- no --> match["match<br/>deterministic checks"]
+    match --> judge["judge<br/>Anthropic / Jev"]
+    judge --> deep["deep check<br/>(only if undecided)"]
+    deep --> merge["merge targets<br/>most dangerous wins"]
+    merge --> sev["severity from config<br/>per aspect, then PR"]
+    sev --> out["one comment<br/>+ one tfreview:* label"]
+```
+
+Only the plan is read, and `before` values never leave the runner. Details are
+in [How tfreview works](docs/how-it-works.md).
+
 ## Why tfreview
 
-- **Plan-only review.** The only input is the `terraform plan` result. No agent
-  walks your repository, so verdicts are stable and each target costs one API call.
-- **Your criteria, in YAML.** What counts as dangerous lives in `.tfreview.yaml`.
-  Deterministic checks (`match`) and judged checks (`instructions`) combine into four
-  check types; the config decides the severity, the LLM only says hit / miss.
-- **Incremental.** Verdicts are cached per target by the hash of plan + config. A
-  push that does not change a target's plan re-uses its verdicts: no drift, no
-  extra cost.
-- **One comment, one label.** The comment is replaced in place, never stacked.
-  `tfreview:critical` on the PR list tells you where to look first.
-- **Many targets, one verdict.** Monorepos and multi-environment layouts are
-  judged together; the most dangerous target wins.
-- **Blocking is opt-in.** By default it only reports. `--fail-on critical` turns
-  it into a required check.
-- **Same verdict locally.** `tfreview fetch --pr N` pulls the plan CI already
-  produced, so you (or your AI agent) can review from a laptop.
+- **Whole-repo AI reviewers re-read everything every time.** They spend tokens
+  on every push and take criteria only as free-form prompt text. tfreview reads
+  only the plan, caches verdicts per target by the hash of plan + config, and
+  re-judges only what changed. Criteria are structured YAML checks, so each
+  aspect is configured on its own.
+- **Your team's rules differ: strict here, relaxed there.** Each check has a
+  severity set in `.tfreview.yaml`. Deterministic checks (`match`) and judged
+  checks (`instructions`) combine freely; the LLM only says hit / miss.
+- **Reviews should not block merges.** By default tfreview only reports. With
+  `approve: true` it approves the PR when every check is clear, so humans look
+  only at what is flagged. `--fail-on critical` makes it a required check
+  instead.
+- **Review results vary from run to run.** The same plan and config give the
+  same verdicts, and one comment (replaced in place) plus one `tfreview:*`
+  label carry the result. Monorepos and multi-environment layouts are judged
+  together; the most dangerous target wins.
+- **Rules should come from past mistakes.** The `tfreview-rules` skill mines a
+  repository's failed applies, reverts, and fix-up PRs and turns them into
+  checkpoints per resource type.
+
+`tfreview fetch --pr N` pulls the plan CI already produced, so you (or your AI
+agent) can get the same verdict from a laptop.
 
 > **Status:** alpha. Breaking changes may occur before v1.
 
