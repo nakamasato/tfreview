@@ -28,25 +28,25 @@ func Comment(r *Result) string {
 		if len(r.Unevaluated) > 0 {
 			suffix = " (" + strings.Join(r.Unevaluated, ", ") + ")"
 		}
-		fmt.Fprintf(&b, "## 🔵 %s: %s%s\n\n", s.Risk, s.Incomplete, suffix)
+		fmt.Fprintf(&b, "## 🔵 Risk: %s%s\n\n", s.Incomplete, suffix)
 	case r.Score == model.SeverityNone:
-		fmt.Fprintf(&b, "## 🟢 %s: none\n\n", s.Risk)
+		b.WriteString("## 🟢 Risk: none\n\n")
 	default:
-		fmt.Fprintf(&b, "## %s %s: %s — %s\n\n", severityEmoji[r.Score], s.Risk, r.Score, topCategory(r))
+		fmt.Fprintf(&b, "## %s Risk: %s\n\n", severityEmoji[r.Score], r.Score)
 	}
 
 	if r.NoPlans {
 		b.WriteString(s.NoPlans + "\n\n")
-		writeMeta(&b, r, s)
+		writeMeta(&b, r)
 		return wrap(b.String())
 	}
 
 	writeBadges(&b, r)
-	writeMeta(&b, r, s)
 
 	if r.NoChanges {
 		b.WriteString(s.NoChanges + "\n\n")
 		writeTargets(&b, r, s)
+		writeMeta(&b, r)
 		return wrap(b.String())
 	}
 
@@ -57,22 +57,22 @@ func Comment(r *Result) string {
 	b.WriteString("\n")
 
 	if len(r.PrimaryChecks) > 0 || len(r.DeepChecks) > 0 || r.DeepEnabled {
-		b.WriteString("<details><summary>LLM phases</summary>\n\n")
-		fmt.Fprintf(&b, "**Phase 1 · %s (%s)**\n\n", r.Provider, r.Model)
+		fmt.Fprintf(&b, "<details><summary>Light Review (%s)</summary>\n\n", r.Provider)
 		if r.Provider == "jev" {
-			fmt.Fprintf(&b, "Jev cost: ≈ $%.4f · score ≤ %.2f = likely safe · score ≥ %.2f = likely risk · middle scores need review.\n\n", r.CostUSD-r.DeepCostUSD, r.JevMissThreshold, r.JevHitThreshold)
+			fmt.Fprintf(&b, "score ≤ %.2f = likely safe · score ≥ %.2f = likely risk · middle scores need review.\n\n", r.JevMissThreshold, r.JevHitThreshold)
 			writeJevMatrix(&b, r.PrimaryChecks, r.JevMissThreshold, r.JevHitThreshold)
 		}
 		writePhaseChecks(&b, r.PrimaryChecks)
+		b.WriteString("</details>\n\n")
 		if r.DeepEnabled || r.DeepUsage.Calls > 0 {
-			fmt.Fprintf(&b, "**Phase 2 · Anthropic Deep Dive (%s)**\n\n", r.DeepModel)
+			b.WriteString("<details><summary>Deep Review (Claude)</summary>\n\n")
 			if len(r.DeepChecks) == 0 {
 				b.WriteString(phase2NotRunReason(r) + "\n\n")
 			} else {
 				writePhaseChecks(&b, r.DeepChecks)
 			}
+			b.WriteString("</details>\n\n")
 		}
-		b.WriteString("</details>\n\n")
 	}
 
 	fmt.Fprintf(&b, "<details><summary>%s</summary>\n\n| %s | %s | %s | %s |\n| --- | --- | --- | --- |\n", s.Checks, s.Check, s.Level, s.Verdict, s.Reason)
@@ -97,14 +97,14 @@ func Comment(r *Result) string {
 		}
 	}
 	if r.Usage.Calls > 0 {
-		parts := []string{usageLine(r.Model, r.Usage, s, r.CostUSD-r.DeepCostUSD)}
+		fmt.Fprintf(&b, "<sub>**total cost**: $%.4f</sub>\n<sub>%s</sub>\n", r.CostUSD, usageLine(r.Model, r.Usage, s, r.CostUSD-r.DeepCostUSD))
 		if r.DeepUsage.Calls > 0 {
-			parts = append(parts, usageLine(r.DeepModel, r.DeepUsage, s, r.DeepCostUSD))
+			fmt.Fprintf(&b, "<sub>%s</sub>\n", usageLine(r.DeepModel, r.DeepUsage, s, r.DeepCostUSD))
 		} else if r.DeepEnabled {
-			parts = append(parts, fmt.Sprintf("Anthropic Deep Dive (%s): not called · 0 tokens · ≈ $0.0000", r.DeepModel))
+			fmt.Fprintf(&b, "<sub>**%s**: not called · 0 tokens · ≈ $0.0000</sub>\n", r.DeepModel)
 		}
-		fmt.Fprintf(&b, "<sub>%s · total ≈ $%.4f</sub>\n", strings.Join(parts, " + "), r.CostUSD)
 	}
+	writeMeta(&b, r)
 	return wrap(b.String())
 }
 
@@ -191,7 +191,7 @@ func phase2NotRunReason(r *Result) string {
 }
 
 func usageLine(model string, u llm.Usage, s texts, cost float64) string {
-	return fmt.Sprintf("%s · %d %s · in %s / cache write %s / cache read %s / out %s %s · ≈ $%.4f",
+	return fmt.Sprintf("**%s**: %d %s · in %s / cache write %s / cache read %s / out %s %s · ≈ $%.4f",
 		model, u.Calls, s.Calls, commas(u.InputTokens), commas(u.CacheWriteTokens), commas(u.CacheReadTokens), commas(u.OutputTokens), s.Tokens, cost)
 }
 
@@ -204,15 +204,6 @@ func usageLine(model string, u llm.Usage, s texts, cost float64) string {
 // reopen the marker-corruption bug by skipping escaping.
 func wrap(body string) string {
 	return Begin + "\n" + escapeHTMLComments(body) + End + "\n"
-}
-
-func topCategory(r *Result) string {
-	for _, c := range r.Categories {
-		if c.Score == r.Score {
-			return c.Title
-		}
-	}
-	return ""
 }
 
 func writeBadges(b *strings.Builder, r *Result) {
@@ -236,7 +227,7 @@ func badgeText(s string) string {
 	return url.PathEscape(s)
 }
 
-func writeMeta(b *strings.Builder, r *Result, s texts) {
+func writeMeta(b *strings.Builder, r *Result) {
 	short := r.HeadSHA
 	if len(short) > 7 {
 		short = short[:7]
@@ -245,7 +236,7 @@ func writeMeta(b *strings.Builder, r *Result, s texts) {
 	if r.Repo != "" {
 		commit = fmt.Sprintf("[`%s`](https://github.com/%s/commit/%s)", short, r.Repo, r.HeadSHA)
 	}
-	fmt.Fprintf(b, "%s <relative-time datetime=\"%s\">%s</relative-time> %s %s.\n\n", s.JudgedAt, r.JudgedAt, r.JudgedAt, s.For, commit)
+	fmt.Fprintf(b, "<sub>**review time**: <relative-time datetime=\"%s\">%s</relative-time></sub>\n<sub>**commit**: %s</sub>\n\n", r.JudgedAt, r.JudgedAt, commit)
 }
 
 func writeTargets(b *strings.Builder, r *Result, s texts) {

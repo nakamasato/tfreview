@@ -163,7 +163,7 @@ func TestCommentStructure(t *testing.T) {
 	require.True(t, len(body) > 0)
 	require.Contains(t, body, Begin)
 	require.Contains(t, body, End)
-	require.Contains(t, body, "## 🔴 Risk: critical — Destruction / downtime")
+	require.Contains(t, body, "## 🔴 Risk: critical\n")
 	require.Contains(t, body, "img.shields.io/badge/risk-critical-B60205")
 	require.Contains(t, body, `<relative-time datetime="2026-09-02T00:00:00Z">`)
 	require.Contains(t, body, "https://github.com/o/r/commit/abc1234def5678")
@@ -253,8 +253,8 @@ func TestBuildPricesEachPassAtItsOwnRate(t *testing.T) {
 	require.InDelta(t, 0.042+5.00+25.00, r.CostUSD, 1e-9)
 
 	body := Comment(r)
-	require.Contains(t, body, "jev-latest · 7 calls")
-	require.Contains(t, body, "claude-opus-5 · 4 calls")
+	require.Contains(t, body, "**jev-latest**: 7 calls")
+	require.Contains(t, body, "**claude-opus-5**: 4 calls")
 }
 
 func TestFooterOmitsAnAbsentSecondPass(t *testing.T) {

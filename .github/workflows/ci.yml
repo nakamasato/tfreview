@@ -1,12 +1,15 @@
 name: ci
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
 permissions:
   contents: read
 jobs:
   test:
+    # `labeled` is only there for preview-comment; relabeling must not rerun the tests.
+    if: github.event.action != 'labeled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -15,3 +18,28 @@ jobs:
           go-version-file: go.mod
       - run: go build ./... && go vet ./... && go test ./...
       - uses: golangci/golangci-lint-action@v9
+
+  # Label a PR `comment` to post a sample review comment and check its layout on GitHub.
+  preview-comment:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'comment') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          jq --arg sha "$HEAD_SHA" --arg repo "$REPO" --arg now "$(date -u +%FT%TZ)" \
+            '.head_sha = $sha | .repo = $repo | .judged_at = $now' \
+            testdata/preview/result.json > "$RUNNER_TEMP/result.json"
+          go run ./cmd/tfreview comment --result "$RUNNER_TEMP/result.json" --pr "$PR" --repo "$REPO" --no-label
