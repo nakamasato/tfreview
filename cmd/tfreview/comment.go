@@ -26,7 +26,7 @@ func githubClient(repoFlag string) (*github.Client, error) {
 func newCommentCmd() *cobra.Command {
 	var resultPath, repo string
 	var pr int
-	var noLabel bool
+	var noLabel, approve bool
 	cmd := &cobra.Command{
 		Use:   "comment",
 		Short: "Post the review result to a pull request as one comment and a label",
@@ -41,6 +41,11 @@ func newCommentCmd() *cobra.Command {
 			}
 			if err := client.UpsertComment(cmd.Context(), pr, render.Comment(result)); err != nil {
 				return fmt.Errorf("post comment: %w", err)
+			}
+			if approve && result.Clear() {
+				if err := client.Approve(cmd.Context(), pr, result.HeadSHA); err != nil {
+					return fmt.Errorf("approve: %w", err)
+				}
 			}
 			if noLabel {
 				return nil
@@ -61,6 +66,7 @@ func newCommentCmd() *cobra.Command {
 	cmd.Flags().IntVar(&pr, "pr", 0, "pull request number")
 	cmd.Flags().StringVar(&repo, "repo", "", "owner/name (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().BoolVar(&noLabel, "no-label", false, "do not touch labels")
+	cmd.Flags().BoolVar(&approve, "approve", false, "approve the PR when every check is clear (needs pull-requests: write)")
 	_ = cmd.MarkFlagRequired("pr")
 	return cmd
 }

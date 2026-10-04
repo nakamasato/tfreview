@@ -80,3 +80,13 @@ func (c *Client) SetLabel(ctx context.Context, pr int, name string) error {
 	}
 	return add()
 }
+
+// Approve submits an APPROVE review pinned to sha, so a push made after the
+// review ran is not covered by it.
+func (c *Client) Approve(ctx context.Context, pr int, sha string) error {
+	body := map[string]string{"event": "APPROVE", "body": "tfreview: all checks clear"}
+	if sha != "" {
+		body["commit_id"] = sha
+	}
+	return c.do(ctx, "POST", fmt.Sprintf("/repos/%s/pulls/%d/reviews", c.Repo, pr), body, nil)
+}

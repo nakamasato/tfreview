@@ -270,3 +270,40 @@ func zipBytes(t *testing.T, files map[string]string) []byte {
 	require.NoError(t, zw.Close())
 	return buf.Bytes()
 }
+
+func TestCommentApproveOnlyWhenClear(t *testing.T) {
+	save := func(r *render.Result) string {
+		p := filepath.Join(t.TempDir(), "result.json")
+		require.NoError(t, r.Save(p))
+		return p
+	}
+	stub := func() *[]string {
+		return stubGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			w.WriteHeader(201)
+			_, _ = w.Write([]byte(`{}`))
+		})
+	}
+	clear := &render.Result{Score: "none", Label: "tfreview:none", Language: "en", HeadSHA: "abc", JudgedAt: "2026-09-02T00:00:00Z"}
+	incomplete := *clear
+	incomplete.Incomplete = true
+
+	paths := stub()
+	require.NoError(t, run(t, "comment", "--result", save(clear), "--pr", "7", "--repo", "o/r", "--approve"))
+	require.Contains(t, *paths, "POST /repos/o/r/pulls/7/reviews")
+
+	paths = stub()
+	require.NoError(t, run(t, "comment", "--result", save(clear), "--pr", "7", "--repo", "o/r"))
+	require.NotContains(t, *paths, "POST /repos/o/r/pulls/7/reviews")
+
+	paths = stub()
+	require.NoError(t, run(t, "comment", "--result", save(&incomplete), "--pr", "7", "--repo", "o/r", "--approve"))
+	require.NotContains(t, *paths, "POST /repos/o/r/pulls/7/reviews")
+
+	paths = stub()
+	require.NoError(t, run(t, "comment", "--result", writeResult(t), "--pr", "7", "--repo", "o/r", "--approve"))
+	require.NotContains(t, *paths, "POST /repos/o/r/pulls/7/reviews")
+}
