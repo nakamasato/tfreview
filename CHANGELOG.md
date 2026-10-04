@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/nakamasato/tfreview/compare/v0.2.1...v0.2.2) (2026-10-04)
+
+
+### Features
+
+* approve the PR when all checks are clear ([#28](https://github.com/nakamasato/tfreview/issues/28)) ([1950767](https://github.com/nakamasato/tfreview/commit/1950767ddd65c55530ae4e01b4f1b1173f44947c))
+* improve PR comment layout ([#30](https://github.com/nakamasato/tfreview/issues/30)) ([b925644](https://github.com/nakamasato/tfreview/commit/b9256445920456cd3206258e69df190630880486))
+
 ## [0.2.1](https://github.com/nakamasato/tfreview/compare/v0.2.0...v0.2.1) (2026-10-04)
 
 
