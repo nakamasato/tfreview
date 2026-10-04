@@ -15,11 +15,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newEvalCmd() *cobra.Command {
+func newReviewHistoryCmd() *cobra.Command {
 	var prs []int
-	var repo, configPath, provider, modelName, deepDive, outPath, format string
+	var repo, configPath, provider, modelName, deepDive, deepDiveModel, outPath, format string
 	cmd := &cobra.Command{
-		Use:   "eval",
+		Use:   "review-history",
 		Short: "Review historical pull request plans and write a local report",
 		Long:  "Fetch saved plan artifacts for pull requests, review them with the current configuration, and write a local Markdown or HTML report. Plans are stored temporarily and removed after the run.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -44,7 +44,7 @@ func newEvalCmd() *cobra.Command {
 				if format == "html" {
 					ext = ".html"
 				}
-				outPath = "tfreview-eval-" + stamp + ext
+				outPath = "tfreview-history-" + stamp + ext
 			}
 			absOut, err := filepath.Abs(outPath)
 			if err != nil {
@@ -53,7 +53,7 @@ func newEvalCmd() *cobra.Command {
 			if err := os.MkdirAll(filepath.Dir(absOut), 0o755); err != nil {
 				return err
 			}
-			tmp, err := os.MkdirTemp("", "tfreview-pr-eval-")
+			tmp, err := os.MkdirTemp("", "tfreview-pr-history-")
 			if err != nil {
 				return err
 			}
@@ -97,6 +97,9 @@ func newEvalCmd() *cobra.Command {
 				if deepDive != "" {
 					args = append(args, "--deep-dive", deepDive)
 				}
+				if deepDiveModel != "" {
+					args = append(args, "--deep-dive-model", deepDiveModel)
+				}
 				reviewErr := runTfreview(cmd.Context(), executable, cmd.ErrOrStderr(), args...)
 				result, err := render.LoadResult(filepath.Join(prDir, "review", "result.json"))
 				if err != nil {
@@ -138,10 +141,11 @@ func newEvalCmd() *cobra.Command {
 	cmd.Flags().StringVar(&repo, "repo", "", "owner/name (default: GITHUB_REPOSITORY, then the git origin remote)")
 	cmd.Flags().StringVar(&configPath, "config", ".tfreview.yaml", "config path")
 	cmd.Flags().StringVar(&provider, "provider", "", "override llm.provider")
-	cmd.Flags().StringVar(&modelName, "model", "claude-sonnet-5-5", "override llm.model (default: claude-sonnet-5-5)")
+	cmd.Flags().StringVar(&modelName, "model", "", "override llm.model (primary provider)")
 	cmd.Flags().StringVar(&deepDive, "deep-dive", "", "override llm.deep_dive (anthropic)")
+	cmd.Flags().StringVar(&deepDiveModel, "deep-dive-model", "", "override llm.deep_dive_model")
 	cmd.Flags().StringVar(&format, "format", "markdown", "report format (markdown|html)")
-	cmd.Flags().StringVar(&outPath, "out", "", "local report path (default: tfreview-eval-<timestamp> with format extension)")
+	cmd.Flags().StringVar(&outPath, "out", "", "local report path (default: tfreview-history-<timestamp> with format extension)")
 	return cmd
 }
 

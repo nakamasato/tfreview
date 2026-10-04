@@ -60,7 +60,7 @@ func newRootCmd() *cobra.Command {
 			}
 		},
 	}
-	root.AddCommand(newExtractCmd(), newReviewCmd(), newCommentCmd(), newFetchCmd(), newEvalCmd())
+	root.AddCommand(newExtractCmd(), newReviewCmd(), newCommentCmd(), newFetchCmd(), newReviewHistoryCmd())
 	return root
 }
 

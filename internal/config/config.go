@@ -27,6 +27,7 @@ func errorf(format string, a ...any) error { return &Error{Msg: fmt.Sprintf(form
 type LLM struct {
 	Provider      string             `yaml:"provider"`
 	Model         string             `yaml:"model"`
+	DeepDiveModel string             `yaml:"deep_dive_model"`
 	MaxPlanChars  int                `yaml:"max_plan_chars"`
 	MaxDiffChars  int                `yaml:"max_diff_chars"`
 	MaxPRChars    int                `yaml:"max_pr_chars"`
@@ -143,7 +144,10 @@ func Parse(raw []byte) (*Config, error) {
 		return nil, errorf("llm.deep_dive %q is not supported (anthropic)", c.LLM.DeepDive)
 	}
 	if c.LLM.Model == "" {
-		c.LLM.Model = "claude-opus-5"
+		c.LLM.Model = "claude-sonnet-5-5"
+	}
+	if c.LLM.DeepDiveModel == "" {
+		c.LLM.DeepDiveModel = "claude-sonnet-5-5"
 	}
 	if c.LLM.MaxPlanChars == 0 {
 		c.LLM.MaxPlanChars = 100000

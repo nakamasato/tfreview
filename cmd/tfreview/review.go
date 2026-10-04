@@ -25,19 +25,20 @@ var now = time.Now
 
 func newReviewCmd() *cobra.Command {
 	var (
-		plans      []string
-		configPath string
-		stateIn    string
-		outDir     string
-		headSHA    string
-		repo       string
-		failOn     string
-		ruleOnly   bool
-		provider   string
-		llmModel   string
-		deepDive   string
-		output     string
-		debugOut   bool
+		plans         []string
+		configPath    string
+		stateIn       string
+		outDir        string
+		headSHA       string
+		repo          string
+		failOn        string
+		ruleOnly      bool
+		provider      string
+		llmModel      string
+		deepDive      string
+		deepDiveModel string
+		output        string
+		debugOut      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -67,6 +68,9 @@ func newReviewCmd() *cobra.Command {
 					return &exitError{code: 2, msg: "--deep-dive must be anthropic"}
 				}
 				cfg.LLM.DeepDive = deepDive
+			}
+			if deepDiveModel != "" {
+				cfg.LLM.DeepDiveModel = deepDiveModel
 			}
 			var ps []*plan.Plan
 			for _, path := range plans {
@@ -105,7 +109,7 @@ func newReviewCmd() *cobra.Command {
 			}
 			result := render.Build(cfg, out, render.Meta{
 				HeadSHA: headSHA, JudgedAt: now().UTC().Format(time.RFC3339), Repo: repo,
-				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Provider: cfg.LLM.Provider, Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.Model, DeepEnabled: cfg.LLM.DeepDive != "", DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil), JevHitThreshold: cfg.LLM.Jev.HitThreshold, JevMissThreshold: cfg.LLM.Jev.MissThreshold,
+				ConfigPath: configPathForLink(configPath), Model: provider.Model(), Provider: cfg.LLM.Provider, Pricing: llm.PricingFor(cfg.LLM.Provider, cfg.LLM.Pricing), DeepModel: cfg.LLM.DeepDiveModel, DeepEnabled: cfg.LLM.DeepDive != "", DeepPricing: llm.PricingFor(cfg.LLM.DeepDive, nil), JevHitThreshold: cfg.LLM.Jev.HitThreshold, JevMissThreshold: cfg.LLM.Jev.MissThreshold,
 			})
 
 			if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -185,8 +189,9 @@ func newReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit 1 when the score reaches this level (medium|high|critical)")
 	cmd.Flags().BoolVar(&ruleOnly, "fail-on-rule-only", false, "with --fail-on, count only deterministic (match) verdicts")
 	cmd.Flags().StringVar(&provider, "provider", "", "override llm.provider (anthropic|claude-cli|jev|mock)")
-	cmd.Flags().StringVar(&llmModel, "model", "", "override llm.model")
+	cmd.Flags().StringVar(&llmModel, "model", "", "override llm.model (primary provider)")
 	cmd.Flags().StringVar(&deepDive, "deep-dive", "", "override llm.deep_dive (anthropic)")
+	cmd.Flags().StringVar(&deepDiveModel, "deep-dive-model", "", "override llm.deep_dive_model")
 	cmd.Flags().StringVar(&output, "format", "", "write the result to stdout as json or comment")
 	cmd.Flags().BoolVar(&debugOut, "debug", false, "write plan attributes and per-phase check details to stderr")
 	return cmd

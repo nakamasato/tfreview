@@ -11,7 +11,7 @@ Here is a small example:
 language: en
 llm:
   provider: anthropic # anthropic | claude-cli | jev | mock
-  model: claude-opus-5
+  model: claude-sonnet-5-5
 aspects:
   - id: resource-deletion
     title: Resource deletion
@@ -29,13 +29,14 @@ aspects:
 ```
 
 The full configuration also supports language, model limits, pricing for the
-cost estimate, a second-pass deep dive, and Jev scoring options:
+cost estimate, a second-pass deep dive, and Jev scoring options. `model` is
+used by the primary Anthropic or Claude CLI provider; Jev uses `jev.model`.
+`deep_dive_model` selects the model for `deep_dive`.
 
 ```yaml
 language: en
 llm:
-  provider: anthropic
-  model: claude-opus-5
+  provider: jev
   max_plan_chars: 100000
   max_tokens: 128000
   pricing: # USD per million tokens; used for the comment estimate
@@ -43,7 +44,8 @@ llm:
     cache_write: 6.25
     cache_read: 0.50
     output: 25.00
-  deep_dive: "" # "" (off) | anthropic
+  deep_dive: anthropic # "" (off) | anthropic
+  deep_dive_model: claude-sonnet-5-5 # used by llm.deep_dive
   jev: # used when provider: jev; requires TYPESAFE_API_KEY
     model: jev-latest
     hit_threshold: 0.70
@@ -64,6 +66,9 @@ aspects:
           true: the action is destroy or replace, and the resource serves requests
           false: anything else, including an add or change action
 ```
+
+With `provider: jev`, Jev uses `jev.model` (`jev-latest` by default), while
+Anthropic uses `deep_dive_model` for individual judgments.
 
 ## Aspects and checks
 

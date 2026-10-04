@@ -1,8 +1,8 @@
 /dist/
 /tfreview
 /tfreview-out/
-/tfreview-eval-*.md
-/tfreview-eval-*.html
+/tfreview-history-*.md
+/tfreview-history-*.html
 *.test
 
 # local-only Claude Code files

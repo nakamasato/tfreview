@@ -57,7 +57,7 @@ func newDeepProvider(cfg *config.Config) (llm.Provider, error) {
 		scorer = jev.New(jev.Options{APIKey: key, Model: cfg.LLM.Jev.Model})
 	}
 	return deepdive.New(deepdive.Options{
-		Model:         cfg.LLM.Model,
+		Model:         cfg.LLM.DeepDiveModel,
 		APIKey:        os.Getenv("ANTHROPIC_API_KEY"),
 		MaxValueChars: cfg.LLM.Jev.MaxValueChars,
 		Checkpoints:   cfg.Checkpoints,

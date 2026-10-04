@@ -4,7 +4,7 @@
 
 For a local workflow that reviews plans fetched from historical pull requests
 and produces a private report without committing plan fixtures, see
-[Reviewing historical pull requests locally](historical-evaluation.md).
+[Reviewing historical pull requests locally](historical-review.md).
 
 `eval/cases/*.json` contains labeled plan fixtures. The evaluation judges each
 fixture and compares its verdicts with the labels. A case lists checks expected
