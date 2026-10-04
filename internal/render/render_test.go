@@ -253,8 +253,8 @@ func TestBuildPricesEachPassAtItsOwnRate(t *testing.T) {
 	require.InDelta(t, 0.042+5.00+25.00, r.CostUSD, 1e-9)
 
 	body := Comment(r)
-	require.Contains(t, body, "jev-latest · 7 calls")
-	require.Contains(t, body, "claude-opus-5 · 4 calls")
+	require.Contains(t, body, "**jev-latest**: 7 calls")
+	require.Contains(t, body, "**claude-opus-5**: 4 calls")
 }
 
 func TestFooterOmitsAnAbsentSecondPass(t *testing.T) {
