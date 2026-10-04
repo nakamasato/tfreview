@@ -35,7 +35,7 @@ access the repository or network.
 - `anthropic` judges checks with an Anthropic API call.
 - `jev` scores each change separately and returns probabilities. Values between
   the configured thresholds remain `unverifiable` unless a deep dive is used.
-- `deep_dive: anthropic` can take a second look at changes left undecided. It
+- `deep_check.provider: anthropic` can take a second look at changes left undecided. It
   requires `ANTHROPIC_API_KEY`.
 - `claude-cli` uses the local `claude` command and is intended for local work.
 - `mock` returns fixed test verdicts and requires `TFREVIEW_ALLOW_MOCK=1`.

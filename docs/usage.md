@@ -80,24 +80,23 @@ artifact and raw `terraform show -json` artifacts from other pipelines. Use
 `--artifact` to select an artifact explicitly and `--target-prefix` when
 artifact filenames do not follow the naming convention tfreview detects.
 
-To review several historical PR plans locally and write an HTML report:
+To save the review as an HTML report, use the existing `review` command:
 
 ```sh
-go run ./cmd/tfreview review-history --repo acme/widgets --pr 123,456 --format html --out /tmp/review.html
+go run ./cmd/tfreview review --plan /tmp/plan.json --format html --out-dir /tmp/tfreview-review
 ```
 
-`review-history` uses saved GitHub Actions plan artifacts and the current config. It
-removes downloaded plans after the run; the report can still contain resource
-addresses and verdict reasons, so review it before sharing. The default report
-name (`tfreview-history-<timestamp>.md` or `.html`) is ignored by Git. Use
-`--format markdown` for Markdown. Pass `--provider jev --deep-dive anthropic`
-to run Jev scoring followed by individual Anthropic judgments;
-`--deep-dive-model` selects the second-pass model. `--model` selects the
-primary provider's model.
+`review.html` is written inside `--out-dir`, alongside the usual
+`comment.md` and `result.json`. For a historical PR, use `fetch` to download
+its saved plan artifact, then pass the extracted plan to `review`. The HTML
+report contains resource addresses and verdict reasons, so review it before
+sharing. Pass `--light-provider jev --deep-provider anthropic` to run Jev
+scoring followed by individual Anthropic judgments. `--light-model` and
+`--deep-model` select the models for each phase.
 
-For local iteration, `--provider claude-cli` uses an installed `claude` CLI
-instead of an API key. `--provider` and `--model` override the configured
-provider and model for one run. `--format json` writes the result JSON to
+For local iteration, `--light-provider claude-cli` uses an installed
+`claude` CLI instead of an API key. `--light-provider` and `--light-model`
+override the first phase for one run. `--format json` writes the result JSON to
 stdout; `--format comment` writes the PR comment Markdown. `--debug` prints
 plan attributes, per-phase check results, and verdicts to stderr.
 
@@ -114,4 +113,3 @@ affect command execution.
 | `tfreview review --plan prod.json [--plan staging.json]` | Judge one or more reduced plans. |
 | `tfreview comment --result result.json --pr 123` | Update a pull request comment and label. |
 | `tfreview fetch --pr 123` | Download a plan artifact from a pull request workflow. |
-| `tfreview review-history --pr 123,456` | Review historical PR plans and write a local report. |

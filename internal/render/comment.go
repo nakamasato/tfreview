@@ -177,7 +177,7 @@ func writeJevMatrix(b *strings.Builder, checks []PhaseCheck, missThreshold, hitT
 
 func phase2NotRunReason(r *Result) string {
 	if !r.DeepEnabled {
-		return "Not run · no second-pass LLM is configured; set `llm.deep_dive: anthropic` to enable individual judgments."
+		return "Not run · no second-pass LLM is configured; set `llm.deep_check.provider: anthropic` to enable individual judgments."
 	}
 	for _, check := range r.PrimaryChecks {
 		if check.Verdict == model.VerdictUnverifiable && len(check.Resources) > 0 {

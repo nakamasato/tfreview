@@ -1,8 +1,6 @@
 /dist/
 /tfreview
 /tfreview-out/
-/tfreview-history-*.md
-/tfreview-history-*.html
 *.test
 
 # local-only Claude Code files

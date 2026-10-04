@@ -25,9 +25,12 @@ func (e *Error) Error() string { return "invalid config: " + e.Msg }
 func errorf(format string, a ...any) error { return &Error{Msg: fmt.Sprintf(format, a...)} }
 
 type LLM struct {
-	Provider      string             `yaml:"provider"`
-	Model         string             `yaml:"model"`
-	DeepDiveModel string             `yaml:"deep_dive_model"`
+	LightCheck CheckProvider `yaml:"light_check"`
+	DeepCheck  CheckProvider `yaml:"deep_check"`
+	// Deprecated flat fields are retained as aliases for existing Go callers and configs.
+	Provider      string             `yaml:"provider,omitempty"`
+	Model         string             `yaml:"model,omitempty"`
+	DeepDiveModel string             `yaml:"deep_dive_model,omitempty"`
 	MaxPlanChars  int                `yaml:"max_plan_chars"`
 	MaxDiffChars  int                `yaml:"max_diff_chars"`
 	MaxPRChars    int                `yaml:"max_pr_chars"`
@@ -38,6 +41,11 @@ type LLM struct {
 	// DeepDive names the provider that takes a second look at what the first pass left
 	// undecided. Empty leaves those checks unverifiable.
 	DeepDive string `yaml:"deep_dive"`
+}
+
+type CheckProvider struct {
+	Provider string `yaml:"provider"`
+	Model    string `yaml:"model"`
 }
 
 // Jev configures the scoring judge. Its thresholds turn a probability into a verdict:
@@ -130,25 +138,52 @@ func Parse(raw []byte) (*Config, error) {
 	if c.Language == "" {
 		c.Language = "en"
 	}
-	if c.LLM.Provider == "" {
-		c.LLM.Provider = "anthropic"
+	if err := defaultJev(&c.LLM.Jev); err != nil {
+		return nil, err
 	}
-	switch c.LLM.Provider {
+	if c.LLM.LightCheck.Provider == "" {
+		c.LLM.LightCheck.Provider = c.LLM.Provider
+	}
+	if c.LLM.LightCheck.Provider == "" {
+		c.LLM.LightCheck.Provider = "anthropic"
+	}
+	if c.LLM.LightCheck.Provider == "jev" {
+		if c.LLM.LightCheck.Model == "" {
+			c.LLM.LightCheck.Model = c.LLM.Jev.Model
+		}
+		c.LLM.Jev.Model = c.LLM.LightCheck.Model
+	}
+	if c.LLM.LightCheck.Model == "" {
+		c.LLM.LightCheck.Model = c.LLM.Model
+		if c.LLM.LightCheck.Model == "" {
+			c.LLM.LightCheck.Model = "claude-sonnet-5-5"
+		}
+	}
+	if c.LLM.DeepCheck.Provider == "" {
+		c.LLM.DeepCheck.Provider = c.LLM.DeepDive
+	}
+	if c.LLM.DeepCheck.Model == "" {
+		c.LLM.DeepCheck.Model = c.LLM.DeepDiveModel
+	}
+	if c.LLM.DeepCheck.Provider == "" && c.LLM.DeepDiveModel == "" {
+		// The model has no effect while the second phase is disabled.
+		c.LLM.DeepCheck.Model = "claude-sonnet-5-5"
+	} else if c.LLM.DeepCheck.Model == "" {
+		c.LLM.DeepCheck.Model = "claude-sonnet-5-5"
+	}
+	switch c.LLM.LightCheck.Provider {
 	case "anthropic", "claude-cli", "jev", "mock":
 	default:
-		return nil, errorf("llm.provider %q is not supported (anthropic|claude-cli|jev|mock)", c.LLM.Provider)
+		return nil, errorf("llm.light_check.provider %q is not supported (anthropic|claude-cli|jev|mock)", c.LLM.LightCheck.Provider)
 	}
-	switch c.LLM.DeepDive {
+	switch c.LLM.DeepCheck.Provider {
 	case "", "anthropic":
 	default:
-		return nil, errorf("llm.deep_dive %q is not supported (anthropic)", c.LLM.DeepDive)
+		return nil, errorf("llm.deep_check.provider %q is not supported (anthropic)", c.LLM.DeepCheck.Provider)
 	}
-	if c.LLM.Model == "" {
-		c.LLM.Model = "claude-sonnet-5-5"
-	}
-	if c.LLM.DeepDiveModel == "" {
-		c.LLM.DeepDiveModel = "claude-sonnet-5-5"
-	}
+	// Keep old exported fields in sync for existing integrations.
+	c.LLM.Provider, c.LLM.Model = c.LLM.LightCheck.Provider, c.LLM.LightCheck.Model
+	c.LLM.DeepDive, c.LLM.DeepDiveModel = c.LLM.DeepCheck.Provider, c.LLM.DeepCheck.Model
 	if c.LLM.MaxPlanChars == 0 {
 		c.LLM.MaxPlanChars = 100000
 	}
@@ -164,10 +199,6 @@ func Parse(raw []byte) (*Config, error) {
 	if c.LLM.MaxTokens == 0 {
 		c.LLM.MaxTokens = 128000
 	}
-	if err := defaultJev(&c.LLM.Jev); err != nil {
-		return nil, err
-	}
-
 	if rc.Aspects == nil || len(*rc.Aspects) == 0 {
 		return nil, errorf("aspects must not be empty")
 	}

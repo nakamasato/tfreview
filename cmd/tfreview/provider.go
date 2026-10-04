@@ -16,15 +16,16 @@ import (
 )
 
 func newProvider(cfg *config.Config) (llm.Provider, error) {
-	switch cfg.LLM.Provider {
+	phase := cfg.LLM.LightCheck
+	switch phase.Provider {
 	case "anthropic":
-		return anthropic.New(anthropic.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, MaxTokens: cfg.LLM.MaxTokens, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
+		return anthropic.New(anthropic.Options{Model: phase.Model, MaxPlanChars: cfg.LLM.MaxPlanChars, MaxTokens: cfg.LLM.MaxTokens, APIKey: os.Getenv("ANTHROPIC_API_KEY")}), nil
 	case "claude-cli":
-		return claudecli.New(claudecli.Options{Model: cfg.LLM.Model, MaxPlanChars: cfg.LLM.MaxPlanChars}), nil
+		return claudecli.New(claudecli.Options{Model: phase.Model, MaxPlanChars: cfg.LLM.MaxPlanChars}), nil
 	case "jev":
 		j := cfg.LLM.Jev
 		return jev.NewProvider(jev.ProviderOptions{
-			Options:       jev.Options{APIKey: os.Getenv("TYPESAFE_API_KEY"), Model: j.Model},
+			Options:       jev.Options{APIKey: os.Getenv("TYPESAFE_API_KEY"), Model: phase.Model},
 			HitThreshold:  j.HitThreshold,
 			MissThreshold: j.MissThreshold,
 			MaxValueChars: j.MaxValueChars,
@@ -35,29 +36,30 @@ func newProvider(cfg *config.Config) (llm.Provider, error) {
 		// explicit opt-in keeps a config typo (or a copied test config) from
 		// silently producing fake verdicts in a real run.
 		if os.Getenv("TFREVIEW_ALLOW_MOCK") != "1" {
-			return nil, fmt.Errorf("llm.provider mock requires TFREVIEW_ALLOW_MOCK=1")
+			return nil, fmt.Errorf("llm.light_check.provider mock requires TFREVIEW_ALLOW_MOCK=1")
 		}
 		return mockFromEnv()
 	}
-	return nil, fmt.Errorf("unsupported provider %q", cfg.LLM.Provider)
+	return nil, fmt.Errorf("unsupported light-check provider %q", phase.Provider)
 }
 
 // newDeepProvider builds the second pass, or nil when none is configured. It is handed
 // a scoring client so its own propositions get a calibrated probability rather than the
 // agent's impression of one.
 func newDeepProvider(cfg *config.Config) (llm.Provider, error) {
-	if cfg.LLM.DeepDive == "" {
+	phase := cfg.LLM.DeepCheck
+	if phase.Provider == "" {
 		return nil, nil
 	}
-	if cfg.LLM.DeepDive != "anthropic" {
-		return nil, fmt.Errorf("unsupported llm.deep_dive %q", cfg.LLM.DeepDive)
+	if phase.Provider != "anthropic" {
+		return nil, fmt.Errorf("unsupported llm.deep_check.provider %q", phase.Provider)
 	}
 	var scorer *jev.Client
 	if key := os.Getenv("TYPESAFE_API_KEY"); key != "" {
 		scorer = jev.New(jev.Options{APIKey: key, Model: cfg.LLM.Jev.Model})
 	}
 	return deepdive.New(deepdive.Options{
-		Model:         cfg.LLM.DeepDiveModel,
+		Model:         phase.Model,
 		APIKey:        os.Getenv("ANTHROPIC_API_KEY"),
 		MaxValueChars: cfg.LLM.Jev.MaxValueChars,
 		Checkpoints:   cfg.Checkpoints,
