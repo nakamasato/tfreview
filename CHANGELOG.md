@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/nakamasato/tfreview/compare/v0.2.2...v0.2.3) (2026-10-05)
+
+
+### Bug Fixes
+
+* keep per-phase verdicts for reused targets ([#33](https://github.com/nakamasato/tfreview/issues/33)) ([d9de7c6](https://github.com/nakamasato/tfreview/commit/d9de7c619ac6d638b1941a75b07af70ddf1ae5f5))
+
 ## [0.2.2](https://github.com/nakamasato/tfreview/compare/v0.2.1...v0.2.2) (2026-10-04)
 
 
