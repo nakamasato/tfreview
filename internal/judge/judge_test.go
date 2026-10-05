@@ -287,3 +287,23 @@ func TestRunDeepDiveSkippedWithNothingToLookAt(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, deep.calls)
 }
+
+func TestRunReusedTargetKeepsPhaseVerdicts(t *testing.T) {
+	first := &mock.Provider{Answers: map[string][]llm.Answer{"prd": {
+		{CheckID: "delete-or-replace", Kind: model.VerdictUnverifiable, Reason: "scored 0.42", Resources: []string{"aws_db_instance.main"}, Score: 0.42},
+		{CheckID: "sg-open", Kind: model.VerdictMiss, Reason: "nothing"},
+	}}}
+	deep := &recorder{answers: map[string]llm.Answer{
+		"delete-or-replace": {CheckID: "delete-or-replace", Kind: model.VerdictHit, Reason: "the alarm points at it"},
+	}}
+	c := runCfgParsed(t)
+	run1, err := Run(context.Background(), Input{Config: c, Plans: deletePlan(), Provider: first, Deep: deep, HeadSHA: "h"})
+	require.NoError(t, err)
+
+	run2, err := Run(context.Background(), Input{Config: c, Plans: deletePlan(), Provider: &mock.Provider{}, Deep: deep, Prev: run1.State, HeadSHA: "h2"})
+	require.NoError(t, err)
+	require.True(t, run2.Targets[0].Reused)
+	require.Equal(t, run1.PhaseVerdicts, run2.PhaseVerdicts)
+	require.Equal(t, model.VerdictUnverifiable, run2.PhaseVerdicts["primary"]["delete-or-replace"].Kind)
+	require.Equal(t, model.VerdictHit, run2.PhaseVerdicts["deep"]["delete-or-replace"].Kind)
+}
