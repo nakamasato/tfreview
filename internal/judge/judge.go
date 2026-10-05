@@ -103,28 +103,36 @@ func Run(ctx context.Context, in Input) (*Output, error) {
 	deepCandidates := map[string][]model.Verdict{}
 	for i, p := range in.Plans {
 		digest := p.Digest()
-		var vs []model.Verdict
+		var vs, primaryVs, deepVs []model.Verdict
 		if cached, ok := in.Prev.Reusable(p.Target, digest, cfg.Digest); ok {
 			out.Targets[i].Reused = true
 			vs = cached
+			ts := in.Prev.Targets[p.Target]
+			// State written before phases were persisted has none; its merged verdicts
+			// are the closest thing to the primary pass.
+			primaryVs, deepVs = ts.Primary, ts.Deep
+			if primaryVs == nil {
+				primaryVs = cached
+			}
 		} else if len(llmChecks) > 0 {
 			var usage llm.Usage
 			vs, usage = judgeTarget(ctx, in.Provider, llm.Request{Plan: p, Checks: llmChecks, Language: cfg.Language})
 			out.Usage.Add(usage)
-			for _, v := range vs {
-				primaryCandidates[v.CheckID] = append(primaryCandidates[v.CheckID], v)
-			}
+			primaryVs = vs
 			if in.Deep != nil {
 				var deepUsage llm.Usage
-				var deepVs []model.Verdict
 				vs, deepVs, deepUsage = deepen(ctx, in.Deep, p, llmChecks, vs, cfg.Language)
 				out.DeepUsage.Add(deepUsage)
-				for _, v := range deepVs {
-					deepCandidates[v.CheckID] = append(deepCandidates[v.CheckID], v)
-				}
 			}
 		}
+		for _, v := range primaryVs {
+			primaryCandidates[v.CheckID] = append(primaryCandidates[v.CheckID], v)
+		}
+		for _, v := range deepVs {
+			deepCandidates[v.CheckID] = append(deepCandidates[v.CheckID], v)
+		}
 		out.State.Put(p.Target, digest, vs)
+		out.State.PutPhases(p.Target, primaryVs, deepVs)
 		for _, v := range vs {
 			candidates[v.CheckID] = append(candidates[v.CheckID], v)
 		}

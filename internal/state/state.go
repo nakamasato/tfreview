@@ -12,6 +12,10 @@ import (
 type TargetState struct {
 	PlanDigest string          `json:"plan_digest"`
 	Verdicts   []model.Verdict `json:"verdicts"`
+	// Primary and Deep are each phase's own results, which Verdicts has merged away.
+	// They let a reused target render the same phase sections as the run that judged it.
+	Primary []model.Verdict `json:"primary,omitempty"`
+	Deep    []model.Verdict `json:"deep,omitempty"`
 }
 
 type State struct {
@@ -67,6 +71,15 @@ func (s *State) Put(target, planDigest string, verdicts []model.Verdict) {
 		return
 	}
 	s.Targets[target] = TargetState{PlanDigest: planDigest, Verdicts: verdicts}
+}
+
+// PutPhases attaches per-phase verdicts to a target Put has stored. It is a no-op for a
+// target Put rejected, so phase data never outlives the verdicts it belongs to.
+func (s *State) PutPhases(target string, primary, deep []model.Verdict) {
+	if ts, ok := s.Targets[target]; ok {
+		ts.Primary, ts.Deep = primary, deep
+		s.Targets[target] = ts
+	}
 }
 
 func hasSkipped(vs []model.Verdict) bool {
