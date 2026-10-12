@@ -262,7 +262,9 @@ func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model
 		// A closer look that failed outright leaves the first pass's verdict in place:
 		// "needs a closer look" is more use to a reviewer than "not evaluated". Likewise a
 		// closer look that settles nothing must not weaken a hit into unverifiable.
-		if d, ok := byID[v.CheckID]; ok && d.Kind != model.VerdictSkipped && !(v.Kind == model.VerdictHit && d.Kind == model.VerdictUnverifiable) {
+		d, ok := byID[v.CheckID]
+		settled := ok && d.Kind != model.VerdictSkipped && (v.Kind != model.VerdictHit || d.Kind != model.VerdictUnverifiable)
+		if settled {
 			d.Resources = v.Resources
 			d.ResourceScores = v.ResourceScores
 			d.Score = v.Score
