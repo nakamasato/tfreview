@@ -259,6 +259,21 @@ func TestRunDeepDiveSettlesUndecided(t *testing.T) {
 	require.Equal(t, 7, int(out.DeepUsage.InputTokens))
 }
 
+func TestRunDeepDiveChecksScoredHits(t *testing.T) {
+	hit := llm.Answer{CheckID: "delete-or-replace", Kind: model.VerdictHit, Resources: []string{"aws_db_instance.main"}, Score: 0.85,
+		ResourceScores: []model.ResourceScore{{Resource: "aws_db_instance.main", Score: 0.85}}}
+	for deepKind, want := range map[model.VerdictKind]model.VerdictKind{
+		model.VerdictMiss:         model.VerdictMiss, // overturned
+		model.VerdictUnverifiable: model.VerdictHit,  // a closer look that settles nothing keeps the hit
+	} {
+		first := &mock.Provider{Answers: map[string][]llm.Answer{"prd": {hit}}}
+		deep := &recorder{answers: map[string]llm.Answer{"delete-or-replace": {CheckID: "delete-or-replace", Kind: deepKind, Reason: "r"}}}
+		out, err := Run(context.Background(), Input{Config: runCfgParsed(t), Plans: deletePlan(), Provider: first, Deep: deep, HeadSHA: "h"})
+		require.NoError(t, err)
+		require.Equal(t, want, out.Verdicts["delete-or-replace"].Kind)
+	}
+}
+
 func TestRunDeepDiveSkippedKeepsTheFirstVerdict(t *testing.T) {
 	first := &mock.Provider{Answers: map[string][]llm.Answer{"prd": {
 		{CheckID: "delete-or-replace", Kind: model.VerdictUnverifiable, Reason: "scored 0.42", Resources: []string{"aws_db_instance.main"}},
