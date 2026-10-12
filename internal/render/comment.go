@@ -180,12 +180,12 @@ func phase2NotRunReason(r *Result) string {
 		return "Not run · no second-pass LLM is configured; set `llm.deep_check.provider: anthropic` to enable individual judgments."
 	}
 	for _, check := range r.PrimaryChecks {
-		if check.Verdict == model.VerdictUnverifiable && len(check.Resources) > 0 {
+		if (check.Verdict == model.VerdictUnverifiable || check.Verdict == model.VerdictHit && len(check.ResourceScores) > 0) && len(check.Resources) > 0 {
 			return "Not run · a second-pass provider is configured, but no individual judgments were recorded."
 		}
 	}
 	if r.Provider == "jev" {
-		return "Not run · no Jev score fell between the miss and hit thresholds for a resource requiring investigation."
+		return "Not run · no Jev score reached the hit threshold or fell between the thresholds for a resource requiring investigation."
 	}
 	return "Not run · the primary judge produced no checks requiring a second opinion."
 }

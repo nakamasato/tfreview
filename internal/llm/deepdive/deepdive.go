@@ -160,7 +160,7 @@ func system(language string) string {
 	if language == "ja" {
 		lang = "in Japanese (日本語)"
 	}
-	return fmt.Sprintf(`You settle one proposition about a `+"`terraform plan`"+` result that a first pass scored as undecided.
+	return fmt.Sprintf(`You settle one proposition about a `+"`terraform plan`"+` result that a first pass scored as undecided or as a likely hit. A score is only a guess about one change: confirm or overturn it from the plan.
 
 - Judge only from what the plan shows. Never conclude something the plan does not contain.
 - `+"`changed_keys`"+` lists the attributes whose value changed in this plan. `+"`before`"+` is not available, so you can tell that a value changed but not which way it moved, except for a boolean that is now false.
@@ -178,7 +178,7 @@ func (p *Provider) firstMessage(req llm.Request, ck model.Check) string {
 
 	focus := req.Focus[ck.ID]
 	if len(focus) > 0 {
-		fmt.Fprintf(&sb, "\n# Scored as undecided\n\n%s\n", list(focus))
+		fmt.Fprintf(&sb, "\n# Flagged by the first pass\n\n%s\n", list(focus))
 	}
 	fmt.Fprintf(&sb, "\n# Changes in this plan\n\n%s\n", p.summary(req.Plan))
 	if cps := p.checkpointsFor(req.Plan, focus); cps != "" {

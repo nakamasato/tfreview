@@ -231,13 +231,15 @@ func anyChanges(plans []*plan.Plan) bool {
 	return false
 }
 
-// deepen re-judges only what the first pass could not settle, and only while it named
-// the changes to look at. An unverifiable verdict with nothing to point at is a
-// statement that the plan cannot show this, which a closer look will not change.
+// deepen re-judges what the first pass could not settle, and what a scoring pass flagged
+// as a hit: a score is a guess about one change, so a hit is confirmed or overturned
+// before it reaches a reviewer. Only verdicts that named the changes to look at qualify;
+// an unverifiable verdict with nothing to point at is a statement that the plan cannot
+// show this, which a closer look will not change.
 func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model.Check, vs []model.Verdict, language string) ([]model.Verdict, []model.Verdict, llm.Usage) {
 	focus := map[string][]string{}
 	for _, v := range vs {
-		if v.Kind == model.VerdictUnverifiable && len(v.Resources) > 0 {
+		if needsCloserLook(v) {
 			focus[v.CheckID] = v.Resources
 		}
 	}
@@ -258,8 +260,11 @@ func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model
 	out := make([]model.Verdict, 0, len(vs))
 	for _, v := range vs {
 		// A closer look that failed outright leaves the first pass's verdict in place:
-		// "needs a closer look" is more use to a reviewer than "not evaluated".
-		if d, ok := byID[v.CheckID]; ok && d.Kind != model.VerdictSkipped {
+		// "needs a closer look" is more use to a reviewer than "not evaluated". Likewise a
+		// closer look that settles nothing must not weaken a hit into unverifiable.
+		d, ok := byID[v.CheckID]
+		settled := ok && d.Kind != model.VerdictSkipped && (v.Kind != model.VerdictHit || d.Kind != model.VerdictUnverifiable)
+		if settled {
 			d.Resources = v.Resources
 			d.ResourceScores = v.ResourceScores
 			d.Score = v.Score
@@ -272,4 +277,13 @@ func deepen(ctx context.Context, deep llm.Provider, p *plan.Plan, checks []model
 		out = append(out, v)
 	}
 	return out, deeper, usage
+}
+
+// needsCloserLook is true for undecided verdicts and for scored hits. Hits without
+// per-resource scores come from a prose judge, which already looked at the plan itself.
+func needsCloserLook(v model.Verdict) bool {
+	if len(v.Resources) == 0 {
+		return false
+	}
+	return v.Kind == model.VerdictUnverifiable || (v.Kind == model.VerdictHit && len(v.ResourceScores) > 0)
 }
