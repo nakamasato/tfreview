@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/nakamasato/tfreview/compare/v0.2.3...v0.2.4) (2026-10-12)
+
+
+### Features
+
+* have the deep check confirm or overturn scored hits ([#35](https://github.com/nakamasato/tfreview/issues/35)) ([dc8c212](https://github.com/nakamasato/tfreview/commit/dc8c21276976b2c3ec89a6358f5306c6c80a29de))
+
 ## [0.2.3](https://github.com/nakamasato/tfreview/compare/v0.2.2...v0.2.3) (2026-10-05)
 
 
