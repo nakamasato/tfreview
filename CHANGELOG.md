@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/nakamasato/tfreview/compare/v0.2.4...v0.2.5) (2026-10-24)
+
+
+### Bug Fixes
+
+* redact only sensitive positions instead of whole nested attributes ([#37](https://github.com/nakamasato/tfreview/issues/37)) ([50bddc5](https://github.com/nakamasato/tfreview/commit/50bddc5682de2beea5990c129907317f8b36247a))
+
 ## [0.2.4](https://github.com/nakamasato/tfreview/compare/v0.2.3...v0.2.4) (2026-10-12)
 
 
