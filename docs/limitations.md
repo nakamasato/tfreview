@@ -23,9 +23,11 @@ model. The evaluation prints disagreements, accuracy, token counts, and cost.
   review aid rather than protection against a malicious insider.
 - LLM verdicts can be wrong. Deterministic verdicts are based on the configured
   rules.
-- `extract` removes attributes Terraform marked `sensitive`, but only at the
-  top level. If part of a nested attribute is sensitive, the whole attribute
-  is dropped. Attributes Terraform did not mark sensitive pass through
+- `extract` removes the values Terraform marked `sensitive`, including those
+  nested inside blocks: sensitive keys are removed and sensitive list elements
+  are replaced with `(sensitive)`. The rest of the block is kept. If
+  `after_sensitive` cannot be parsed, the whole `after` is dropped. Attributes
+  Terraform did not mark sensitive pass through
   unchanged, including scripts, policy documents, and environment variables;
   they are sent to the configured LLM provider with the plan. Mark such
   attributes `sensitive = true` in the provider or module, or exclude the
