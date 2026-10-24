@@ -123,7 +123,9 @@ func Kind(actions []string) string {
 }
 
 // after_sensitive mirrors the shape of after, with true set at sensitive positions.
-// Only top-level attributes are considered (a nested sensitive flag drops the whole attribute).
+// Terraform also emits the shape of nested blocks (`[{}]`) where nothing is sensitive,
+// so only a true flag counts. Sensitive map keys are removed; list elements are masked
+// so that indices keep lining up with replace_paths.
 func stripSensitive(after map[string]any, sensitive json.RawMessage) map[string]any {
 	if after == nil {
 		return nil
@@ -136,30 +138,66 @@ func stripSensitive(after map[string]any, sensitive json.RawMessage) map[string]
 			return nil
 		}
 	}
-	out := make(map[string]any, len(after))
-	for k, v := range after {
-		if f, ok := flags[k]; ok && isSensitive(f) {
-			continue
-		}
-		out[k] = v
-	}
-	return out
+	return redact(after, flags).(map[string]any)
 }
 
-func isSensitive(flag any) bool {
+const masked = "(sensitive)"
+
+func redact(v, flag any) any {
+	if !hasTrue(flag) {
+		return v
+	}
+	switch f := flag.(type) {
+	case map[string]any:
+		if m, ok := v.(map[string]any); ok {
+			out := make(map[string]any, len(m))
+			for k, x := range m {
+				if b, _ := f[k].(bool); !b {
+					out[k] = redact(x, f[k])
+				}
+			}
+			return out
+		}
+	case []any:
+		if s, ok := v.([]any); ok {
+			out := make([]any, len(s))
+			for i, x := range s {
+				var sub any
+				if i < len(f) {
+					sub = f[i]
+				}
+				out[i] = redact(x, sub)
+			}
+			return out
+		}
+	}
+	// A true flag, or a flag whose shape doesn't match the value: fail closed.
+	return masked
+}
+
+func hasTrue(flag any) bool {
 	switch f := flag.(type) {
 	case bool:
 		return f
 	case map[string]any:
-		return len(f) > 0
+		for _, x := range f {
+			if hasTrue(x) {
+				return true
+			}
+		}
 	case []any:
-		return len(f) > 0
+		for _, x := range f {
+			if hasTrue(x) {
+				return true
+			}
+		}
 	}
 	return false
 }
 
 // after_unknown mirrors after's shape, with true set at positions whose value
-// won't be known until apply. Like after_sensitive, only top-level attributes are checked.
+// won't be known until apply. Only top-level attributes are reported; one is
+// listed if any position inside it is unknown.
 func unknownKeys(unknown json.RawMessage) []string {
 	if s := string(unknown); s == "" || s == "false" || s == "null" {
 		return nil
@@ -170,7 +208,7 @@ func unknownKeys(unknown json.RawMessage) []string {
 	}
 	var out []string
 	for k, f := range flags {
-		if isSensitive(f) {
+		if hasTrue(f) {
 			out = append(out, k)
 		}
 	}

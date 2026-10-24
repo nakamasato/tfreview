@@ -102,6 +102,51 @@ func TestExtractPopulatesUnknownKeys(t *testing.T) {
 	require.Nil(t, r.After["encryption_config"])
 }
 
+func extractOne(t *testing.T, change string) Resource {
+	t.Helper()
+	raw := `{"resource_changes":[{"address":"acme_job.this","type":"acme_job","name":"this","change":` + change + `}]}`
+	p, err := Extract([]byte(raw), "x")
+	require.NoError(t, err)
+	return byAddress(p, "acme_job.this")
+}
+
+// Terraform emits the shape of nested blocks in after_sensitive even when nothing
+// inside is sensitive; that must not hide the block from the reviewer.
+func TestExtractKeepsNestedBlocksWhenNothingIsSensitive(t *testing.T) {
+	r := extractOne(t, `{"actions":["create"],"before":null,
+		"after":{"name":"job","template":[{"containers":[{"env":[{"name":"DB","value_source":[{"secret_key_ref":[{"secret":"db"}]}]}]}]}]},
+		"after_sensitive":{"template":[{"containers":[{"env":[{"value_source":[{"secret_key_ref":[{}]}]}]}]}]}}`)
+	require.Contains(t, r.After, "template")
+}
+
+func TestExtractRedactsOnlyNestedSensitivePositions(t *testing.T) {
+	r := extractOne(t, `{"actions":["create"],"before":null,
+		"after":{"name":"job","template":[{"containers":[{"image":"app","env":[{"name":"A","value":"s3cret"},{"name":"B","value":"plain"}]}]}],"tokens":["t1","t2"]},
+		"after_sensitive":{"template":[{"containers":[{"env":[{"value":true},{}]}]}],"tokens":[false,true]}}`)
+	require.Equal(t, map[string]any{
+		"name": "job",
+		"template": []any{map[string]any{"containers": []any{map[string]any{
+			"image": "app",
+			"env": []any{
+				map[string]any{"name": "A"},
+				map[string]any{"name": "B", "value": "plain"},
+			},
+		}}}},
+		"tokens": []any{"t1", "(sensitive)"},
+	}, r.After)
+}
+
+func TestExtractDropsTopLevelSensitiveAttribute(t *testing.T) {
+	r := extractOne(t, `{"actions":["create"],"before":null,"after":{"name":"job","password":"s3cret"},"after_sensitive":{"password":true}}`)
+	require.Equal(t, map[string]any{"name": "job"}, r.After)
+}
+
+func TestExtractUnknownKeysNeedsATrueFlag(t *testing.T) {
+	r := extractOne(t, `{"actions":["update"],"before":{"a":1,"template":[{}]},"after":{"a":2,"template":[{}],"id":null,"nested":[{"x":null}]},
+		"after_sensitive":{},"after_unknown":{"template":[{}],"id":true,"nested":[{"x":true}]}}`)
+	require.Equal(t, []string{"id", "nested"}, r.UnknownKeys)
+}
+
 func TestExtractRejectsInvalidJSON(t *testing.T) {
 	_, err := Extract([]byte("{"), "x")
 	require.Error(t, err)
